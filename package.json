@@ -1,0 +1,34 @@
+{
+  "name": "edge",
+  "version": "0.1.0",
+  "description": "",
+  "scripts": {
+    "clean": "npx rimraf npm-*.log && npx rimraf package-lock.json && npx rimraf node_modules && npm cache verify",
+    "lint": "npx prettier-standard --lint",
+    "nuke": "npm run clean && npm install",
+    "start": "node edge.js BTCUSDT",
+    "upgrade": "npx upgradeps -n"
+  },
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "chalk": "^4.1.2",
+    "commander": "^8.2.0",
+    "date-fns": "^2.25.0",
+    "date-fns-tz": "^1.1.6",
+    "figures": "^4.0.0",
+    "jsonfile": "^6.1.0",
+    "node-binance-api": "^0.13.0",
+    "rxjs": "^7.4.0",
+    "strip-ansi": "^7.0.1"
+  },
+  "devDependencies": {
+    "prettier-standard": "^16.4.1",
+    "rimraf": "^3.0.2",
+    "upgradeps": "^1.4.3"
+  },
+  "author": "Luciano Ropero <lropero@gmail.com>",
+  "exports": "./edge.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module"
+}
