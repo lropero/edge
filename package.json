@@ -11,15 +11,14 @@
   },
   "dependencies": {
     "blessed": "^0.1.81",
+    "cfonts": "^2.10.0",
     "chalk": "^4.1.2",
     "commander": "^8.2.0",
     "date-fns": "^2.25.0",
-    "date-fns-tz": "^1.1.6",
     "figures": "^4.0.0",
     "jsonfile": "^6.1.0",
     "node-binance-api": "^0.13.0",
-    "rxjs": "^7.4.0",
-    "strip-ansi": "^7.0.1"
+    "rxjs": "^7.4.0"
   },
   "devDependencies": {
     "prettier-standard": "^16.4.1",
