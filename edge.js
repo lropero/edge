@@ -11,23 +11,24 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-import Binance from 'node-binance-api'
 import blessed from 'blessed'
 import CFonts from 'cfonts'
 import chalk from 'chalk'
 import figures from 'figures'
 import jsonfile from 'jsonfile'
+import WebSocket from 'ws'
 import { debounceTime } from 'rxjs/operators'
 import { format } from 'date-fns'
 import { fromEvent } from 'rxjs'
 import { program } from 'commander'
 
+const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
 const store = {}
 
 const addBox = type => {
-  const { colors } = store
   switch (type) {
     case 'display': {
+      const { colors } = store
       const display = blessed.box({
         align: 'right',
         height: 4,
@@ -40,6 +41,7 @@ const addBox = type => {
       break
     }
     case 'highway': {
+      const { colors } = store
       const highway = blessed.box({
         height: '100%',
         right: 0,
@@ -123,9 +125,7 @@ const getLine = trade => {
   const level = Math.abs(trade.level)
   const blocks = Math.floor(level / 8)
   const eighths = level - blocks * 8
-  return `\n${' '.repeat(42 - blocks - (eighths ? 1 : 0))}${chalk[trade.level > 0 ? colors.highway.up : colors.highway.down](
-    `${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`
-  )}`
+  return `\n${' '.repeat(42 - blocks - (eighths ? 1 : 0))}${chalk[colors.highway[trade.level > 0 ? 'up' : 'down']](`${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`)}`
 }
 
 const getPartialBlock = eighths => {
@@ -162,15 +162,19 @@ const initialize = () => {
 }
 
 const start = () => {
-  const { binance, pair } = store
+  const { pair, webSocket } = store
   try {
     initialize()
-    binance.websockets.trades(pair, trade => {
-      // const { a: sellerOrderId, b: buyerOrderId, E: eventTime, e: eventType, m: marketMaker, p: price, q: quantity, s: symbol, t: tradeId, T: tradeTime } = trade
-      const { m: marketMaker, p: price, q: quantity, T: tradeTime } = trade
-      const level = calculateLevel(price)
-      updateStore({ trade: { level, marketMaker, price, quantity, tradeTime } })
+    webSocket.on('message', message => {
+      const { e, ...rest } = JSON.parse(message)
+      e === 'aggTrade' && updateStore({ trade: rest })
     })
+    webSocket.send(
+      JSON.stringify({
+        method: 'SUBSCRIBE',
+        params: [`${pair.toLowerCase()}@aggTrade`]
+      })
+    )
   } catch (error) {
     console.log(`${chalk.gray(format(new Date(), 'HH:mm:ss'))} ${chalk.red(figures.cross)} ${error.toString()}`)
     process.exit()
@@ -178,20 +182,18 @@ const start = () => {
 }
 
 const updateStore = updates => {
-  const { colors, initialized, trades } = store
   Object.keys(updates).forEach(key => {
-    const previous = store[key]
-    store[key] = updates[key]
-    if (initialized) {
+    if (store.initialized) {
       switch (key) {
         case 'trade': {
-          store.directionColor =
-            updates[key].price > previous.price
-              ? colors.display.priceUp
-              : updates[key].price < previous.price
-              ? colors.display.priceDown
-              : store.directionColor ?? 'gray'
-          trades.unshift(previous)
+          const { colors, trades } = store
+          const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
+          const level = calculateLevel(price)
+          const previous = store[key]
+          const trade = { level, marketMaker, price, quantity, tradeTime }
+          store[key] = trade
+          store.directionColor = price > previous?.price ? colors.display.priceUp : price < previous?.price ? colors.display.priceDown : store.directionColor ?? 'gray'
+          trades.unshift(trade)
           const TRADES_LENGTH = 100
           if (trades.length > TRADES_LENGTH) {
             do {
@@ -200,7 +202,12 @@ const updateStore = updates => {
           }
           return draw()
         }
+        default: {
+          store[key] = updates[key]
+        }
       }
+    } else {
+      store[key] = updates[key]
     }
   })
 }
@@ -209,40 +216,43 @@ program
   .argument('<pair>', 'pair')
   .action(async pair => {
     const { version } = await jsonfile.readFile('./package.json')
-    updateStore({
-      binance: new Binance().options({
-        log: () => {},
-        useServerTime: true
-      }),
-      boxes: {},
-      colors: {
-        backgroundRight: 'black',
-        display: {
-          pair: 'yellow',
-          priceDown: 'red',
-          priceUp: 'green'
-        },
-        highway: {
-          down: 'red',
-          up: 'green'
-        }
-      },
-      currency: new Intl.NumberFormat('en-US', {
-        currency: 'USD',
-        minimumFractionDigits: 2,
-        style: 'currency'
-      }),
-      deltas: [],
-      initialized: true,
-      pair,
-      screen: blessed.screen({
-        forceUnicode: true,
-        fullUnicode: true,
-        smartCSR: true
-      }),
-      title: `Edge v${version}`,
-      trades: []
+    const webSocket = new WebSocket(BINANCE_STREAM)
+    webSocket.on('error', error => {
+      console.error(error.message)
     })
-    start()
+    webSocket.on('open', () => {
+      updateStore({
+        boxes: {},
+        colors: {
+          backgroundRight: 'black',
+          display: {
+            pair: 'yellow',
+            priceDown: 'red',
+            priceUp: 'green'
+          },
+          highway: {
+            down: 'red',
+            up: 'green'
+          }
+        },
+        currency: new Intl.NumberFormat('en-US', {
+          currency: 'USD',
+          minimumFractionDigits: 2,
+          style: 'currency'
+        }),
+        deltas: [],
+        initialized: true,
+        pair,
+        screen: blessed.screen({
+          forceUnicode: true,
+          fullUnicode: true,
+          smartCSR: true
+        }),
+        title: `Edge v${version}`,
+        trades: [],
+        webSocket
+      })
+      start()
+    })
   })
   .parse(process.argv)

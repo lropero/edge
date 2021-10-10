@@ -17,8 +17,8 @@
     "date-fns": "^2.25.0",
     "figures": "^4.0.0",
     "jsonfile": "^6.1.0",
-    "node-binance-api": "^0.13.0",
-    "rxjs": "^7.4.0"
+    "rxjs": "^7.4.0",
+    "ws": "^8.2.3"
   },
   "devDependencies": {
     "prettier-standard": "^16.4.1",
