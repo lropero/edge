@@ -79,10 +79,21 @@ const addBox = type => {
       addBox('display')
       break
     }
+    case 'polarvol': {
+      const { colors, screen } = store
+      const polarvol = blessed.box({
+        bottom: 8,
+        height: 5,
+        style: { bg: colors.polarvol.background },
+        width: screen.width - 44
+      })
+      append({ box: polarvol, type })
+      break
+    }
     case 'volume': {
       const { colors, screen } = store
       const volume = blessed.box({
-        height: screen.height - 12,
+        height: screen.height - 17,
         style: { bg: colors.backgroundLeft },
         top: 4,
         width: screen.width - 44
@@ -166,14 +177,26 @@ const draw = () => {
           }
         )
       )
-      if (screen.height - 12 > 0) {
+      const polarvol = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
+      const max = Math.max(...polarvol.map(value => Math.abs(value)))
+      boxes.polarvol.setContent(
+        asciichart.plot(
+          polarvol.map(value => value / max),
+          {
+            colors: [colors.polarvol.line],
+            format: close => chalk[colors.polarvol.label](close.toFixed(2).padStart(8)),
+            height: 4
+          }
+        )
+      )
+      if (screen.height - 17 > 0) {
         const lineColors = [colors.volume.line, colors.volume.buy, colors.volume.sell]
         const series = [values.slice(-width).map(candle => candle.volume), values.slice(-width).map(candle => candle.buy), values.slice(-width).map(candle => candle.sell)]
         boxes.volume.setContent(
           asciichart.plot([series[shuffled[0]], series[shuffled[1]], series[shuffled[2]]], {
             colors: [lineColors[shuffled[0]], lineColors[shuffled[1]], lineColors[shuffled[2]]],
             format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
-            height: screen.height - 13
+            height: screen.height - 18
           })
         )
       } else {
@@ -236,6 +259,7 @@ const initialize = () => {
   addBox('chart')
   addBox('gauge')
   addBox('highway')
+  addBox('polarvol')
   addBox('volume')
   screen.key('q', () => process.exit())
   screen.title = title
@@ -244,6 +268,7 @@ const initialize = () => {
     .subscribe(() => {
       addBox('chart')
       addBox('gauge')
+      addBox('polarvol')
       addBox('volume')
     })
   interval(50).subscribe(draw)
@@ -349,6 +374,11 @@ program
           highway: {
             down: 'red',
             up: 'green'
+          },
+          polarvol: {
+            background: 'red',
+            label: 'black',
+            line: asciichart.default
           },
           volume: {
             buy: asciichart.cyan,
