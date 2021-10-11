@@ -36,9 +36,9 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        height: screen.height - 12,
-        style: { bg: colors.backgroundLeft },
-        top: 4,
+        bottom: 0,
+        height: 8,
+        style: { bg: colors.chart.background },
         width: screen.width - 44
       })
       append({ box: chart, type })
@@ -82,9 +82,9 @@ const addBox = type => {
     case 'volume': {
       const { colors, screen } = store
       const volume = blessed.box({
-        bottom: 0,
-        height: 8,
-        style: { bg: colors.volume.background },
+        height: screen.height - 12,
+        style: { bg: colors.backgroundLeft },
+        top: 4,
         width: screen.width - 44
       })
       append({ box: volume, type })
@@ -133,7 +133,7 @@ const calculateLevel = price => {
 }
 
 const draw = () => {
-  const { boxes, candles, colors, currency, directionColor, pair, screen, trade, trades } = store
+  const { boxes, candles, colors, currency, directionColor, pair, screen, shuffled, trade, trades } = store
   if (trade) {
     const pairRender = CFonts.render(pair, {
       colors: [colors.display.pair],
@@ -147,18 +147,6 @@ const draw = () => {
     })
     const values = Object.values(candles)
     const width = screen.width - 54
-    boxes.chart.setContent(
-      screen.height - 12 > 0 && values.length > 1 && width > 1
-        ? asciichart.plot(
-            values.slice(-width).map(candle => candle.close),
-            {
-              colors: [colors.chart.line],
-              format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-              height: screen.height - 13
-            }
-          )
-        : ''
-    )
     boxes.display.setContent(`${pairRender.string}\n${priceRender.string}`)
     boxes.gauge.setContent(getGauge())
     boxes.highway.setContent(
@@ -167,18 +155,33 @@ const draw = () => {
         .map(trade => getLine(trade))
         .join('')}`
     )
-    boxes.volume.setContent(
-      values.length > 1 && width > 1
-        ? asciichart.plot(
-            values.slice(-width).map(candle => candle.volume),
-            {
-              colors: [colors.volume.line],
-              format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
-              height: 7
-            }
-          )
-        : ''
-    )
+    if (values.length > 1 && width > 1) {
+      boxes.chart.setContent(
+        asciichart.plot(
+          values.slice(-width).map(candle => candle.close),
+          {
+            colors: [colors.chart.line],
+            format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
+            height: 7
+          }
+        )
+      )
+      if (screen.height - 12 > 0) {
+        const lineColors = [colors.volume.line, colors.volume.buy, colors.volume.sell]
+        const series = [values.slice(-width).map(candle => candle.volume), values.slice(-width).map(candle => candle.buy), values.slice(-width).map(candle => candle.sell)]
+        boxes.volume.setContent(
+          asciichart.plot([series[shuffled[0]], series[shuffled[1]], series[shuffled[2]]], {
+            colors: [lineColors[shuffled[0]], lineColors[shuffled[1]], lineColors[shuffled[2]]],
+            format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
+            height: screen.height - 13
+          })
+        )
+      } else {
+        boxes.volume.setContent('')
+      }
+    } else {
+      boxes.chart.setContent('')
+    }
   }
   screen.render()
 }
@@ -244,6 +247,7 @@ const initialize = () => {
       addBox('volume')
     })
   interval(50).subscribe(draw)
+  interval(2000).subscribe(() => updateStore({ shuffled: store.shuffled.map(index => (index + 1 === 3 ? 0 : index + 1)) }))
   draw()
 }
 
@@ -326,9 +330,10 @@ program
         boxes: {},
         candles: {},
         colors: {
-          backgroundLeft: 'yellow',
+          backgroundLeft: 'white',
           backgroundRight: 'black',
           chart: {
+            background: 'yellow',
             label: 'gray',
             line: asciichart.darkgray
           },
@@ -346,9 +351,10 @@ program
             up: 'green'
           },
           volume: {
-            background: 'white',
-            label: 'blue',
-            line: asciichart.blue
+            buy: asciichart.green,
+            label: 'gray',
+            line: asciichart.blue,
+            sell: asciichart.red
           }
         },
         currency: new Intl.NumberFormat('en-US', {
@@ -364,6 +370,7 @@ program
           fullUnicode: true,
           smartCSR: true
         }),
+        shuffled: [0, 1, 2],
         title: `Edge v${version}`,
         trades: [],
         webSocket
