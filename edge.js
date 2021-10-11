@@ -326,11 +326,11 @@ program
         boxes: {},
         candles: {},
         colors: {
-          backgroundLeft: 'gray',
+          backgroundLeft: 'yellow',
           backgroundRight: 'black',
           chart: {
-            label: 'yellow',
-            line: asciichart.yellow
+            label: 'gray',
+            line: asciichart.darkgray
           },
           display: {
             pair: 'yellow',
@@ -346,9 +346,9 @@ program
             up: 'green'
           },
           volume: {
-            background: 'blue',
-            label: 'gray',
-            line: asciichart.darkgray
+            background: 'white',
+            label: 'blue',
+            line: asciichart.blue
           }
         },
         currency: new Intl.NumberFormat('en-US', {
