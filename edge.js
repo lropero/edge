@@ -20,7 +20,7 @@ import jsonfile from 'jsonfile'
 import WebSocket from 'ws'
 import { debounceTime } from 'rxjs/operators'
 import { format } from 'date-fns'
-import { fromEvent } from 'rxjs'
+import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
@@ -35,7 +35,7 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        height: screen.height - 4,
+        height: screen.height - 12,
         style: { bg: colors.backgroundLeft },
         top: 4,
         width: screen.width - 44
@@ -76,6 +76,17 @@ const addBox = type => {
       })
       append({ box: highway, type })
       addBox('display')
+      break
+    }
+    case 'volume': {
+      const { colors, screen } = store
+      const volume = blessed.box({
+        bottom: 0,
+        height: 8,
+        style: { bg: colors.volume.background },
+        width: screen.width - 44
+      })
+      append({ box: volume, type })
       break
     }
   }
@@ -133,19 +144,16 @@ const draw = () => {
       font: 'tiny',
       space: false
     })
-    const height = screen.height - 5
     const values = Object.values(candles)
-    const width = screen.width - trade.price.toFixed(2).length - 46
+    const width = screen.width - 54
     boxes.chart.setContent(
-      height > 0 && values.length > 1 && width > 1
+      screen.height - 12 > 0 && values.length > 1 && width > 1
         ? asciichart.plot(
             values.slice(-width).map(candle => candle.close),
             {
               colors: [colors.chart.line],
-              format: close => chalk[colors.chart.label](close.toFixed(2)),
-              height,
-              offset: 3,
-              padding: ''
+              format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
+              height: screen.height - 13
             }
           )
         : ''
@@ -157,6 +165,18 @@ const draw = () => {
         .slice(0, screen.height - 4)
         .map(trade => getLine(trade))
         .join('')}`
+    )
+    boxes.volume.setContent(
+      values.length > 1 && width > 1
+        ? asciichart.plot(
+            values.slice(-width).map(candle => candle.volume),
+            {
+              colors: [colors.volume.line],
+              format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
+              height: 7
+            }
+          )
+        : ''
     )
   }
   screen.render()
@@ -212,6 +232,7 @@ const initialize = () => {
   addBox('chart')
   addBox('gauge')
   addBox('highway')
+  addBox('volume')
   screen.key('q', () => process.exit())
   screen.title = title
   fromEvent(screen, 'resize')
@@ -219,8 +240,9 @@ const initialize = () => {
     .subscribe(() => {
       addBox('chart')
       addBox('gauge')
-      draw()
+      addBox('volume')
     })
+  interval(60).subscribe(draw)
   draw()
 }
 
@@ -271,7 +293,7 @@ const updateStore = updates => {
           const previous = store[key]
           store[key] = trade
           store.directionColor = trade.price > previous?.price ? colors.display.priceUp : trade.price < previous?.price ? colors.display.priceDown : store.directionColor ?? 'gray'
-          return draw()
+          break
         }
         default: {
           store[key] = updates[key]
@@ -300,7 +322,7 @@ program
           backgroundRight: 'black',
           chart: {
             label: 'yellow',
-            line: asciichart.white
+            line: asciichart.yellow
           },
           display: {
             pair: 'yellow',
@@ -314,6 +336,11 @@ program
           highway: {
             down: 'red',
             up: 'green'
+          },
+          volume: {
+            background: 'blue',
+            label: 'black',
+            line: asciichart.black
           }
         },
         currency: new Intl.NumberFormat('en-US', {
