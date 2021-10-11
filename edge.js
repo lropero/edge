@@ -11,6 +11,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+import asciichart from 'asciichart'
 import blessed from 'blessed'
 import CFonts from 'cfonts'
 import chalk from 'chalk'
@@ -23,10 +24,25 @@ import { fromEvent } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
+const DELTAS_LENGTH = 100
+const MAX_LEVEL = 320
+const TRADES_LENGTH = 3000
+
 const store = {}
 
 const addBox = type => {
   switch (type) {
+    case 'chart': {
+      const { colors, screen } = store
+      const chart = blessed.box({
+        height: screen.height - 4,
+        style: { bg: colors.backgroundLeft },
+        top: 4,
+        width: screen.width - 44
+      })
+      append({ box: chart, type })
+      break
+    }
     case 'display': {
       const { colors } = store
       const display = blessed.box({
@@ -40,6 +56,16 @@ const addBox = type => {
       append({ box: display, type })
       break
     }
+    case 'gauge': {
+      const { colors, screen } = store
+      const gauge = blessed.box({
+        height: 4,
+        style: { bg: colors.backgroundLeft },
+        width: screen.width - 44
+      })
+      append({ box: gauge, type })
+      break
+    }
     case 'highway': {
       const { colors } = store
       const highway = blessed.box({
@@ -49,6 +75,7 @@ const addBox = type => {
         width: 44
       })
       append({ box: highway, type })
+      addBox('display')
       break
     }
   }
@@ -64,28 +91,25 @@ const append = ({ box, type }) => {
 }
 
 const calculateLevel = price => {
-  const { deltas, trades } = store
-  const previousTrade = trades[0]
-  if (!previousTrade) {
+  const { deltas, trade } = store
+  if (!trade) {
     return 0
   }
-  const delta = Math.abs(price - previousTrade.price)
+  const delta = Math.abs(price - trade.price)
   if (delta > 0) {
     deltas.push(delta)
-    const DELTAS_LENGTH = 300
     if (deltas.length > DELTAS_LENGTH) {
       do {
         deltas.shift()
       } while (deltas.length > DELTAS_LENGTH)
     }
     const average = deltas.reduce((average, delta) => average + delta, 0) / deltas.length
-    let level = previousTrade.level
-    if (price < previousTrade.price) {
+    let level = trade.level
+    if (price < trade.price) {
       level -= Math.round((delta / average) * 8)
-    } else if (price > previousTrade.price) {
+    } else if (price > trade.price) {
       level += Math.round((delta / average) * 8)
     }
-    const MAX_LEVEL = 320
     if (level > MAX_LEVEL) {
       level = MAX_LEVEL
     } else if (level < -MAX_LEVEL) {
@@ -93,11 +117,11 @@ const calculateLevel = price => {
     }
     return level
   }
-  return previousTrade.level
+  return trade.level
 }
 
 const draw = () => {
-  const { boxes, colors, currency, directionColor, pair, screen, trade, trades } = store
+  const { boxes, candles, colors, currency, directionColor, pair, screen, trade, trades } = store
   if (trade) {
     const pairRender = CFonts.render(pair, {
       colors: [colors.display.pair],
@@ -109,7 +133,25 @@ const draw = () => {
       font: 'tiny',
       space: false
     })
+    const height = screen.height - 5
+    const values = Object.values(candles)
+    const width = screen.width - trade.price.toFixed(2).length - 46
+    boxes.chart.setContent(
+      height > 0 && values.length > 1 && width > 1
+        ? asciichart.plot(
+            values.slice(-width).map(candle => candle.close),
+            {
+              colors: [colors.chart.line],
+              format: close => chalk[colors.chart.label](close.toFixed(2)),
+              height,
+              offset: 3,
+              padding: ''
+            }
+          )
+        : ''
+    )
     boxes.display.setContent(`${pairRender.string}\n${priceRender.string}`)
+    boxes.gauge.setContent(getGauge())
     boxes.highway.setContent(
       `\n\n\n${trades
         .slice(0, screen.height - 4)
@@ -118,6 +160,22 @@ const draw = () => {
     )
   }
   screen.render()
+}
+
+const getGauge = () => {
+  const { colors, screen, trades } = store
+  const buy = trades.reduce((buy, trade) => buy + (trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
+  const sell = trades.reduce((sell, trade) => sell + (!trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
+  const volume = buy + sell
+  const width = screen.width - 44
+  if (width > 0) {
+    const widthBuy = Math.round((buy * width) / volume)
+    const widthSell = width - widthBuy
+    return Array(4)
+      .fill(`${chalk[colors.gauge.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauge.sell]('\u2588'.repeat(widthSell))}`)
+      .join('\n')
+  }
+  return ''
 }
 
 const getLine = trade => {
@@ -151,13 +209,18 @@ const getPartialBlock = eighths => {
 
 const initialize = () => {
   const { screen, title } = store
+  addBox('chart')
+  addBox('gauge')
   addBox('highway')
-  addBox('display')
   screen.key('q', () => process.exit())
   screen.title = title
   fromEvent(screen, 'resize')
     .pipe(debounceTime(50))
-    .subscribe(draw)
+    .subscribe(() => {
+      addBox('chart')
+      addBox('gauge')
+      draw()
+    })
   draw()
 }
 
@@ -186,20 +249,28 @@ const updateStore = updates => {
     if (store.initialized) {
       switch (key) {
         case 'trade': {
-          const { colors, trades } = store
+          const { candles, colors, trades } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
-          const level = calculateLevel(price)
-          const previous = store[key]
-          const trade = { level, marketMaker, price, quantity, tradeTime }
-          store[key] = trade
-          store.directionColor = price > previous?.price ? colors.display.priceUp : price < previous?.price ? colors.display.priceDown : store.directionColor ?? 'gray'
+          const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
+          trade.level = calculateLevel(trade.price)
+          const date = new Date(trade.tradeTime)
+          const candleId = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}-${date.getUTCHours() * 60 + date.getUTCMinutes()}`
+          if (!candles[candleId]) {
+            candles[candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
+          }
+          candles[candleId].close = trade.price
+          candles[candleId].count++
+          candles[candleId].volume += trade.quantity
+          candles[candleId][marketMaker ? 'buy' : 'sell'] += trade.quantity
           trades.unshift(trade)
-          const TRADES_LENGTH = 100
           if (trades.length > TRADES_LENGTH) {
             do {
               trades.pop()
             } while (trades.length > TRADES_LENGTH)
           }
+          const previous = store[key]
+          store[key] = trade
+          store.directionColor = trade.price > previous?.price ? colors.display.priceUp : trade.price < previous?.price ? colors.display.priceDown : store.directionColor ?? 'gray'
           return draw()
         }
         default: {
@@ -223,12 +294,22 @@ program
     webSocket.on('open', () => {
       updateStore({
         boxes: {},
+        candles: {},
         colors: {
+          backgroundLeft: 'gray',
           backgroundRight: 'black',
+          chart: {
+            label: 'yellow',
+            line: asciichart.white
+          },
           display: {
             pair: 'yellow',
             priceDown: 'red',
             priceUp: 'green'
+          },
+          gauge: {
+            buy: 'cyan',
+            sell: 'magenta'
           },
           highway: {
             down: 'red',
