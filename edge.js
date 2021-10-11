@@ -351,10 +351,10 @@ program
             up: 'green'
           },
           volume: {
-            buy: asciichart.green,
+            buy: asciichart.cyan,
             label: 'gray',
-            line: asciichart.blue,
-            sell: asciichart.red
+            line: asciichart.darkgray,
+            sell: asciichart.magenta
           }
         },
         currency: new Intl.NumberFormat('en-US', {
