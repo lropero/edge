@@ -24,6 +24,7 @@ import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
+const CANDLES_LENGTH = 300
 const DELTAS_LENGTH = 100
 const MAX_LEVEL = 320
 const TRADES_LENGTH = 3000
@@ -242,7 +243,7 @@ const initialize = () => {
       addBox('gauge')
       addBox('volume')
     })
-  interval(60).subscribe(draw)
+  interval(50).subscribe(draw)
   draw()
 }
 
@@ -276,9 +277,16 @@ const updateStore = updates => {
           const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
           trade.level = calculateLevel(trade.price)
           const date = new Date(trade.tradeTime)
-          const candleId = `${date.getUTCFullYear()}-${date.getUTCMonth()}-${date.getUTCDate()}-${date.getUTCHours() * 60 + date.getUTCMinutes()}`
+          const candleId = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}-${date.getUTCHours() * 60 + date.getUTCMinutes()}`
           if (!candles[candleId]) {
             candles[candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
+            const candleIds = Object.keys(candles).sort()
+            if (candleIds.length > CANDLES_LENGTH) {
+              do {
+                delete candles[candleIds[0]]
+                candleIds.shift()
+              } while (candleIds.length > CANDLES_LENGTH)
+            }
           }
           candles[candleId].close = trade.price
           candles[candleId].count++
@@ -339,8 +347,8 @@ program
           },
           volume: {
             background: 'blue',
-            label: 'black',
-            line: asciichart.black
+            label: 'gray',
+            line: asciichart.darkgray
           }
         },
         currency: new Intl.NumberFormat('en-US', {
