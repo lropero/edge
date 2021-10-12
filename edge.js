@@ -24,9 +24,10 @@ import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
-const CANDLES_LENGTH = 300
+const CANDLES_LENGTH = 288
 const DELTAS_LENGTH = 100
 const MAX_LEVEL = 320
+const TIMEFRAME = 5
 const TRADES_LENGTH = 3000
 
 const store = {}
@@ -36,9 +37,9 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        bottom: 0,
-        height: 8,
-        style: { bg: colors.chart.background },
+        height: screen.height - 17,
+        style: { bg: colors.backgroundLeft },
+        top: 4,
         width: screen.width - 44
       })
       append({ box: chart, type })
@@ -93,9 +94,9 @@ const addBox = type => {
     case 'volume': {
       const { colors, screen } = store
       const volume = blessed.box({
-        height: screen.height - 17,
-        style: { bg: colors.backgroundLeft },
-        top: 4,
+        bottom: 0,
+        height: 8,
+        style: { bg: colors.volume.background },
         width: screen.width - 44
       })
       append({ box: volume, type })
@@ -144,7 +145,7 @@ const calculateLevel = price => {
 }
 
 const draw = () => {
-  const { boxes, candles, colors, currency, directionColor, pair, screen, shuffled, trade, trades } = store
+  const { boxes, candles, colors, currency, directionColor, pair, rotate, screen, trade, trades } = store
   if (trade) {
     const pairRender = CFonts.render(pair, {
       colors: [colors.display.pair],
@@ -156,8 +157,6 @@ const draw = () => {
       font: 'tiny',
       space: false
     })
-    const values = Object.values(candles)
-    const width = screen.width - 54
     boxes.display.setContent(`${pairRender.string}\n${priceRender.string}`)
     boxes.gauge.setContent(getGauge())
     boxes.highway.setContent(
@@ -166,17 +165,9 @@ const draw = () => {
         .map(trade => getLine(trade))
         .join('')}`
     )
+    const values = Object.values(candles)
+    const width = screen.width - 54
     if (values.length > 1 && width > 1) {
-      boxes.chart.setContent(
-        asciichart.plot(
-          values.slice(-width).map(candle => candle.close),
-          {
-            colors: [colors.chart.line],
-            format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-            height: 7
-          }
-        )
-      )
       const polarvol = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
       const max = Math.max(...polarvol.map(value => Math.abs(value)))
       boxes.polarvol.setContent(
@@ -189,21 +180,33 @@ const draw = () => {
           }
         )
       )
+      const lineColors = [colors.volume.line, colors.volume.buy, colors.volume.sell]
+      const series = [values.slice(-width).map(candle => candle.volume), values.slice(-width).map(candle => candle.buy), values.slice(-width).map(candle => candle.sell)]
+      boxes.volume.setContent(
+        asciichart.plot([series[rotate[0]], series[rotate[1]], series[rotate[2]]], {
+          colors: [lineColors[rotate[0]], lineColors[rotate[1]], lineColors[rotate[2]]],
+          format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
+          height: 7
+        })
+      )
       if (screen.height - 17 > 0) {
-        const lineColors = [colors.volume.line, colors.volume.buy, colors.volume.sell]
-        const series = [values.slice(-width).map(candle => candle.volume), values.slice(-width).map(candle => candle.buy), values.slice(-width).map(candle => candle.sell)]
-        boxes.volume.setContent(
-          asciichart.plot([series[shuffled[0]], series[shuffled[1]], series[shuffled[2]]], {
-            colors: [lineColors[shuffled[0]], lineColors[shuffled[1]], lineColors[shuffled[2]]],
-            format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
-            height: screen.height - 18
-          })
+        boxes.chart.setContent(
+          asciichart.plot(
+            values.slice(-width).map(candle => candle.close),
+            {
+              colors: [colors.chart.line],
+              format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
+              height: screen.height - 18
+            }
+          )
         )
       } else {
-        boxes.volume.setContent('')
+        boxes.chart.setContent('')
       }
     } else {
       boxes.chart.setContent('')
+      boxes.polarvol.setContent('')
+      boxes.volume.setContent('')
     }
   }
   screen.render()
@@ -272,7 +275,7 @@ const initialize = () => {
       addBox('volume')
     })
   interval(50).subscribe(draw)
-  interval(2000).subscribe(() => updateStore({ shuffled: store.shuffled.map(index => (index + 1 === 3 ? 0 : index + 1)) }))
+  interval(2000).subscribe(() => updateStore({ rotate: store.rotate.map(index => (index + 1 === 3 ? 0 : index + 1)) }))
   draw()
 }
 
@@ -306,7 +309,7 @@ const updateStore = updates => {
           const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
           trade.level = calculateLevel(trade.price)
           const date = new Date(trade.tradeTime)
-          const candleId = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}-${date.getUTCHours() * 60 + date.getUTCMinutes()}`
+          const candleId = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}-${Math.floor((date.getUTCHours() * 60 + date.getUTCMinutes()) / TIMEFRAME)}`
           if (!candles[candleId]) {
             candles[candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
             const candleIds = Object.keys(candles).sort()
@@ -355,10 +358,9 @@ program
         boxes: {},
         candles: {},
         colors: {
-          backgroundLeft: 'white',
+          backgroundLeft: 'yellow',
           backgroundRight: 'black',
           chart: {
-            background: 'yellow',
             label: 'gray',
             line: asciichart.darkgray
           },
@@ -381,6 +383,7 @@ program
             line: asciichart.default
           },
           volume: {
+            background: 'white',
             buy: asciichart.cyan,
             label: 'gray',
             line: asciichart.darkgray,
@@ -395,12 +398,12 @@ program
         deltas: [],
         initialized: true,
         pair,
+        rotate: [0, 1, 2],
         screen: blessed.screen({
           forceUnicode: true,
           fullUnicode: true,
           smartCSR: true
         }),
-        shuffled: [0, 1, 2],
         title: `Edge v${version}`,
         trades: [],
         webSocket
