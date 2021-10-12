@@ -19,6 +19,7 @@
     "figures": "^4.0.0",
     "jsonfile": "^6.1.0",
     "rxjs": "^7.4.0",
+    "sound-play": "^1.1.0",
     "ws": "^8.2.3"
   },
   "devDependencies": {

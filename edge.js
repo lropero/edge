@@ -17,6 +17,7 @@ import CFonts from 'cfonts'
 import chalk from 'chalk'
 import figures from 'figures'
 import jsonfile from 'jsonfile'
+import sound from 'sound-play'
 import WebSocket from 'ws'
 import { debounceTime } from 'rxjs/operators'
 import { format } from 'date-fns'
@@ -105,6 +106,17 @@ const addBox = type => {
   }
 }
 
+const analyze = () => {
+  const { candles } = store
+  const values = Object.values(candles).slice(0, -1)
+  const voldiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
+  const max = Math.max(...voldiff.map(value => Math.abs(value)))
+  const polarvol = voldiff.map(value => value / max)
+  if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
+    sound.play('signal.mp3')
+  }
+}
+
 const append = ({ box, type }) => {
   const { boxes, screen } = store
   if (boxes[type]) {
@@ -168,11 +180,11 @@ const draw = () => {
     const values = Object.values(candles)
     const width = screen.width - 54
     if (values.length > 1 && width > 1) {
-      const polarvol = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
-      const max = Math.max(...polarvol.map(value => Math.abs(value)))
+      const voldiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
+      const max = Math.max(...voldiff.map(value => Math.abs(value)))
       boxes.polarvol.setContent(
         asciichart.plot(
-          polarvol.map(value => value / max),
+          voldiff.map(value => value / max),
           {
             colors: [colors.polarvol.line],
             format: close => chalk[colors.polarvol.label](close.toFixed(2).padStart(8)),
@@ -318,6 +330,7 @@ const updateStore = updates => {
                 delete candles[candleIds[0]]
                 candleIds.shift()
               } while (candleIds.length > CANDLES_LENGTH)
+              analyze()
             }
           }
           candles[candleId].close = trade.price
