@@ -25,10 +25,10 @@ import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
-const LENGTH_CANDLES = [1440, 480, 288, 192, 72]
+const LENGTH_CANDLES = [720, 480, 288, 192, 72]
 const LENGTH_DELTAS = 100
 const LENGTH_TRADES = 1000
-const MAX_LEVEL = 320
+const MAX_LEVEL = 368
 const PLAY_MAC = 'afplay <SOUND>'
 const PLAY_WINDOWS = '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>'
 const TIMEFRAMES = [1, 3, 5, 15, 60]
@@ -43,7 +43,7 @@ const addBox = type => {
         height: screen.height - 17,
         style: { bg: colors.chart.background },
         top: 4,
-        width: screen.width - 44
+        width: screen.width - 50
       })
       append({ box: chart, type })
       break
@@ -56,7 +56,7 @@ const addBox = type => {
         right: 1,
         style: { bg: colors.display.background },
         top: 0,
-        width: 43
+        width: 49
       })
       append({ box: display, type })
       screen.append(
@@ -75,7 +75,7 @@ const addBox = type => {
       const gauge = blessed.box({
         height: 4,
         style: { bg: colors.gauge.background },
-        width: screen.width - 44
+        width: screen.width - 50
       })
       append({ box: gauge, type })
       break
@@ -87,7 +87,7 @@ const addBox = type => {
         right: 0,
         style: { bg: colors.highway.background },
         top: 4,
-        width: 44
+        width: 50
       })
       append({ box: highway, type })
       break
@@ -100,7 +100,7 @@ const addBox = type => {
         height: 8,
         right: 0,
         style: { bg: colors.log.background, fg: colors.log.foreground },
-        width: 44
+        width: 50
       })
       append({ box: log, type })
       break
@@ -111,7 +111,7 @@ const addBox = type => {
         bottom: 8,
         height: 5,
         style: { bg: colors.polarvol.background },
-        width: screen.width - 44
+        width: screen.width - 50
       })
       append({ box: polarvol, type })
       break
@@ -122,7 +122,7 @@ const addBox = type => {
         bottom: 0,
         height: 8,
         style: { bg: colors.volume.background },
-        width: screen.width - 44
+        width: screen.width - 50
       })
       append({ box: volume, type })
       break
@@ -131,14 +131,17 @@ const addBox = type => {
 }
 
 const analyze = timeframe => {
-  const { candles } = store
+  const { candles, chartsActive, pair } = store
   const values = Object.values(candles[timeframe]).slice(0, -1)
   const voldiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
   const max = Math.max(...voldiff.map(value => Math.abs(value)))
   const polarvol = voldiff.map(value => value / max)
   if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
-    log(`${timeframe}m ${polarvol[polarvol.length - 1] === 1 ? chalk.green('⬆') : chalk.red('⬇')}`)
+    log(`${pair} ${timeframe}m ${polarvol[polarvol.length - 1] === 1 ? chalk.green('⬆') : chalk.red('⬇')}`)
     play('signal.mp3')
+  }
+  if (!chartsActive.includes(timeframe)) {
+    updateStore({ chartsActive: [...chartsActive, timeframe] })
   }
 }
 
@@ -182,7 +185,7 @@ const calculateLevel = price => {
 }
 
 const cycleChart = (previous = false) => {
-  const { charts, currentChart } = store
+  const { charts, currentChart, drawInterval, drawTimeout } = store
   if (charts.length > 1) {
     let index = charts.indexOf(currentChart)
     if (previous) {
@@ -197,13 +200,20 @@ const cycleChart = (previous = false) => {
     }
     updateStore({ currentChart: charts[index] })
   }
+  drawTimeout && clearTimeout(drawTimeout)
+  drawInterval.unsubscribe()
+  store.drawInterval = interval(50).subscribe(draw)
+  store.drawTimeout = setTimeout(() => {
+    store.drawInterval.unsubscribe()
+    store.drawInterval = interval(1000).subscribe(draw)
+  }, 300000)
 }
 
 const draw = () => {
-  const { boxes, candles, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
+  const { boxes, candles, chartsActive, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
   if (trade) {
-    const pairRender = CFonts.render(pair, {
-      colors: [colors.display.pair],
+    const pairRender = CFonts.render(`${pair}${currentChart ? ` ${currentChart}m` : ''}`, {
+      colors: [colors.display[chartsActive.includes(currentChart) ? 'pairActive' : 'pair']],
       font: 'tiny',
       space: false
     })
@@ -223,7 +233,7 @@ const draw = () => {
     boxes.gauge.setContent(getGauge())
     if (currentChart) {
       const values = Object.values(candles[currentChart])
-      const width = screen.width - 54
+      const width = screen.width - 60
       if (values.length > 1 && width > 1) {
         const voldiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
         const max = Math.max(...voldiff.map(value => Math.abs(value)))
@@ -279,7 +289,7 @@ const getGauge = () => {
   const buy = trades.reduce((buy, trade) => buy + (trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
   const sell = trades.reduce((sell, trade) => sell + (!trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
   const volume = buy + sell
-  const width = screen.width - 44
+  const width = screen.width - 50
   if (width > 0) {
     const widthBuy = Math.round((buy * width) / volume)
     const widthSell = width - widthBuy
@@ -295,7 +305,7 @@ const getLine = trade => {
   const level = Math.abs(trade.level)
   const blocks = Math.floor(level / 8)
   const eighths = level - blocks * 8
-  return `${' '.repeat(42 - blocks - (eighths ? 1 : 0))}${chalk[colors.highway[trade.level > 0 ? 'up' : 'down']](`${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`)}`
+  return `${' '.repeat(48 - blocks - (eighths ? 1 : 0))}${chalk[colors.highway[trade.level > 0 ? 'up' : 'down']](`${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`)}`
 }
 
 const getPartialBlock = eighths => {
@@ -320,7 +330,7 @@ const getPartialBlock = eighths => {
 }
 
 const initialize = () => {
-  const { colors, screen, title } = store
+  const { screen, title } = store
   addBox('chart')
   addBox('display')
   addBox('gauge')
@@ -332,7 +342,6 @@ const initialize = () => {
   screen.key('m', () => cycleChart())
   screen.key('q', () => process.exit())
   screen.title = title
-  updateStore({ message: `${title} ${chalk[colors.log.divider]('|')} ${chalk[colors.log.key]('n')}/${chalk[colors.log.key]('m')} cycle charts - ${chalk[colors.log.key]('q')}uit  ` })
   fromEvent(screen, 'resize')
     .pipe(debounceTime(500))
     .subscribe(() => {
@@ -342,7 +351,14 @@ const initialize = () => {
       addBox('polarvol')
       addBox('volume')
     })
-  interval(100).subscribe(draw)
+  updateStore({ drawInterval: interval(50).subscribe(draw) })
+  updateStore({
+    drawTimeout: setTimeout(() => {
+      store.drawInterval.unsubscribe()
+      store.drawInterval = interval(1000).subscribe(draw)
+    }, 300000)
+  })
+  updateStore({ message: `${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  ` })
   interval(2000).subscribe(() => {
     updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
   })
@@ -389,26 +405,9 @@ const updateStore = updates => {
           store.charts = updates[key]
           break
         }
-        case 'currentChart': {
-          const { screen, timeout } = store
-          timeout && clearTimeout(timeout)
-          const content = `CHART ${updates[key]}m`
-          const popup = blessed.box({
-            content,
-            height: 1,
-            left: 2,
-            style: { bg: 'black', fg: 'white' },
-            top: 1,
-            width: content.length
-          })
-          append({ box: popup, type: 'popup' })
-          store.timeout = setTimeout(() => store.boxes.popup && screen.remove(store.boxes.popup), 2000)
-          store.currentChart = updates[key]
-          break
-        }
         case 'message': {
           const { messages } = store
-          store.messages = [updates[key], ...messages]
+          store.messages = [...messages, updates[key]]
           break
         }
         case 'trade': {
@@ -482,6 +481,7 @@ program
           return candles
         }, {}),
         charts: [],
+        chartsActive: [],
         colors: {
           chart: {
             background: 'yellow',
@@ -491,11 +491,12 @@ program
           display: {
             background: 'black',
             pair: 'yellow',
+            pairActive: 'white',
             priceDown: 'red',
             priceUp: 'green'
           },
           gauge: {
-            background: 'yellow',
+            background: 'black',
             buy: 'cyan',
             sell: 'magenta'
           },
@@ -507,9 +508,7 @@ program
           log: {
             background: 'blue',
             date: 'black',
-            divider: 'cyan',
-            foreground: 'white',
-            key: 'gray'
+            foreground: 'white'
           },
           polarvol: {
             background: 'red',
