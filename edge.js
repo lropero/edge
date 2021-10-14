@@ -40,7 +40,7 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        height: screen.height - 20,
+        height: screen.height - 22,
         style: { bg: colors.chart.background },
         top: 4,
         width: screen.width - 50
@@ -52,7 +52,7 @@ const addBox = type => {
       const { colors, screen } = store
       const count = blessed.box({
         bottom: 13,
-        height: 3,
+        height: 5,
         style: { bg: colors.count.background },
         width: screen.width - 50
       })
@@ -81,14 +81,14 @@ const addBox = type => {
       )
       break
     }
-    case 'gauge': {
+    case 'gauges': {
       const { colors, screen } = store
-      const gauge = blessed.box({
+      const gauges = blessed.box({
         height: 4,
-        style: { bg: colors.gauge.background },
+        style: { bg: colors.gauges.background },
         width: screen.width - 50
       })
-      append({ box: gauge, type })
+      append({ box: gauges, type })
       break
     }
     case 'highway': {
@@ -216,7 +216,7 @@ const cycleChart = (previous = false) => {
   store.drawInterval = interval(50).subscribe(draw)
   store.drawTimeout = setTimeout(() => {
     store.drawInterval.unsubscribe()
-    store.drawInterval = interval(1000).subscribe(draw)
+    store.drawInterval = interval(200).subscribe(draw)
   }, 900000)
 }
 
@@ -241,7 +241,7 @@ const draw = () => {
         .join('\n')}`
     )
     boxes.log.setContent(messages.join('\n'))
-    boxes.gauge.setContent(getGauge())
+    boxes.gauges.setContent(getGauges())
     if (currentChart) {
       const values = Object.values(candles[currentChart])
       const width = screen.width - 60
@@ -252,7 +252,7 @@ const draw = () => {
             {
               colors: [colors.count.line],
               format: count => chalk[colors.count.label](count.toFixed(0).padStart(8)),
-              height: 2
+              height: 4
             }
           )
         )
@@ -277,14 +277,14 @@ const draw = () => {
             height: 7
           })
         )
-        if (screen.height - 20 > 0) {
+        if (screen.height - 22 > 0) {
           boxes.chart.setContent(
             asciichart.plot(
               values.slice(-width).map(candle => candle.close),
               {
                 colors: [colors.chart.line],
                 format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-                height: screen.height - 21
+                height: screen.height - 23
               }
             )
           )
@@ -305,7 +305,7 @@ const draw = () => {
   screen.render()
 }
 
-const getGauge = () => {
+const getGauges = () => {
   const { colors, screen, trades } = store
   const lines = []
   const width = screen.width - 50
@@ -317,7 +317,7 @@ const getGauge = () => {
       const volume = buy + sell
       const widthBuy = Math.round((buy * width) / volume)
       const widthSell = width - widthBuy
-      lines.push(`${chalk[colors.gauge.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauge.sell]('\u2588'.repeat(widthSell))}`)
+      lines.push(`${chalk[colors.gauges.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauges.sell]('\u2588'.repeat(widthSell))}`)
     })
     return lines.join('\n')
   }
@@ -358,7 +358,7 @@ const initialize = () => {
   addBox('chart')
   addBox('count')
   addBox('display')
-  addBox('gauge')
+  addBox('gauges')
   addBox('highway')
   addBox('log')
   addBox('polarvol')
@@ -373,7 +373,7 @@ const initialize = () => {
       addBox('chart')
       addBox('count')
       addBox('display')
-      addBox('gauge')
+      addBox('gauges')
       addBox('highway')
       addBox('log')
       addBox('polarvol')
@@ -383,7 +383,7 @@ const initialize = () => {
   updateStore({
     drawTimeout: setTimeout(() => {
       store.drawInterval.unsubscribe()
-      store.drawInterval = interval(1000).subscribe(draw)
+      store.drawInterval = interval(200).subscribe(draw)
     }, 900000)
   })
   updateStore({ message: `${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  ` })
@@ -524,12 +524,12 @@ program
           },
           display: {
             background: 'black',
-            pair: 'yellow',
+            pair: process.platform === 'win32' ? 'gray' : 'yellow',
             pairActive: 'white',
             priceDown: 'red',
             priceUp: 'green'
           },
-          gauge: {
+          gauges: {
             background: 'black',
             buy: 'cyan',
             sell: 'magenta'
