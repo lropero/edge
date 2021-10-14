@@ -216,7 +216,7 @@ const cycleChart = (previous = false) => {
   store.drawInterval = interval(50).subscribe(draw)
   store.drawTimeout = setTimeout(() => {
     store.drawInterval.unsubscribe()
-    store.drawInterval = interval(200).subscribe(draw)
+    store.drawInterval = interval(250).subscribe(draw)
   }, 900000)
 }
 
@@ -383,7 +383,7 @@ const initialize = () => {
   updateStore({
     drawTimeout: setTimeout(() => {
       store.drawInterval.unsubscribe()
-      store.drawInterval = interval(200).subscribe(draw)
+      store.drawInterval = interval(250).subscribe(draw)
     }, 900000)
   })
   updateStore({ message: `${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  ` })
