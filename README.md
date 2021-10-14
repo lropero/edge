@@ -4,7 +4,7 @@ Trading edge.
 
 ### Requires
 
-- [Node v14.18.0](https://nodejs.org/)
+- [Node v14.18.1](https://nodejs.org/)
 - npm v8.0.0
 
 ### Installation

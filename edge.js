@@ -25,10 +25,10 @@ import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
 const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
-const LENGTH_CANDLES = [720, 480, 288, 192, 72]
-const LENGTH_DELTAS = 100
-const LENGTH_TRADES = 1000
-const MAX_LEVEL = 368
+const CANDLES_LENGTH = [720, 360, 288, 192, 72]
+const GAUGES = [375, 750, 1500, 3000]
+const HIGHWAY_DELTAS = 100
+const HIGHWAY_LEVEL = 368
 const PLAY_MAC = 'afplay <SOUND>'
 const PLAY_WINDOWS = '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>'
 const TIMEFRAMES = [1, 3, 5, 15, 60]
@@ -40,12 +40,23 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        height: screen.height - 17,
+        height: screen.height - 20,
         style: { bg: colors.chart.background },
         top: 4,
         width: screen.width - 50
       })
       append({ box: chart, type })
+      break
+    }
+    case 'count': {
+      const { colors, screen } = store
+      const count = blessed.box({
+        bottom: 13,
+        height: 3,
+        style: { bg: colors.count.background },
+        width: screen.width - 50
+      })
+      append({ box: count, type })
       break
     }
     case 'display': {
@@ -133,9 +144,9 @@ const addBox = type => {
 const analyze = timeframe => {
   const { candles, chartsActive, pair } = store
   const values = Object.values(candles[timeframe]).slice(0, -1)
-  const voldiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
-  const max = Math.max(...voldiff.map(value => Math.abs(value)))
-  const polarvol = voldiff.map(value => value / max)
+  const volDiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
+  const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
+  const polarvol = volDiff.map(value => value / maxVolDiff)
   if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
     log(`${pair} ${timeframe}m ${polarvol[polarvol.length - 1] === 1 ? chalk.green('⬆') : chalk.red('⬇')}`)
     play('signal.mp3')
@@ -162,10 +173,10 @@ const calculateLevel = price => {
   const delta = Math.abs(price - trade.price)
   if (delta > 0) {
     deltas.push(delta)
-    if (deltas.length > LENGTH_DELTAS) {
+    if (deltas.length > HIGHWAY_DELTAS) {
       do {
         deltas.shift()
-      } while (deltas.length > LENGTH_DELTAS)
+      } while (deltas.length > HIGHWAY_DELTAS)
     }
     const average = deltas.reduce((average, delta) => average + delta, 0) / deltas.length
     let level = trade.level
@@ -174,10 +185,10 @@ const calculateLevel = price => {
     } else if (price > trade.price) {
       level += Math.round((delta / average) * 8)
     }
-    if (level > MAX_LEVEL) {
-      level = MAX_LEVEL
-    } else if (level < -MAX_LEVEL) {
-      level = -MAX_LEVEL
+    if (level > HIGHWAY_LEVEL) {
+      level = HIGHWAY_LEVEL
+    } else if (level < -HIGHWAY_LEVEL) {
+      level = -HIGHWAY_LEVEL
     }
     return level
   }
@@ -206,7 +217,7 @@ const cycleChart = (previous = false) => {
   store.drawTimeout = setTimeout(() => {
     store.drawInterval.unsubscribe()
     store.drawInterval = interval(1000).subscribe(draw)
-  }, 300000)
+  }, 900000)
 }
 
 const draw = () => {
@@ -235,11 +246,21 @@ const draw = () => {
       const values = Object.values(candles[currentChart])
       const width = screen.width - 60
       if (values.length > 1 && width > 1) {
-        const voldiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
-        const max = Math.max(...voldiff.map(value => Math.abs(value)))
+        boxes.count.setContent(
+          asciichart.plot(
+            values.slice(-width).map(candle => candle.count),
+            {
+              colors: [colors.count.line],
+              format: count => chalk[colors.count.label](count.toFixed(0).padStart(8)),
+              height: 2
+            }
+          )
+        )
+        const volDiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
+        const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
         boxes.polarvol.setContent(
           asciichart.plot(
-            voldiff.map(value => value / max),
+            volDiff.map(value => value / maxVolDiff),
             {
               colors: [colors.polarvol.line],
               format: close => chalk[colors.polarvol.label](close.toFixed(2).padStart(8)),
@@ -256,14 +277,14 @@ const draw = () => {
             height: 7
           })
         )
-        if (screen.height - 17 > 0) {
+        if (screen.height - 20 > 0) {
           boxes.chart.setContent(
             asciichart.plot(
               values.slice(-width).map(candle => candle.close),
               {
                 colors: [colors.chart.line],
                 format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-                height: screen.height - 18
+                height: screen.height - 21
               }
             )
           )
@@ -286,16 +307,19 @@ const draw = () => {
 
 const getGauge = () => {
   const { colors, screen, trades } = store
-  const buy = trades.reduce((buy, trade) => buy + (trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
-  const sell = trades.reduce((sell, trade) => sell + (!trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
-  const volume = buy + sell
+  const lines = []
   const width = screen.width - 50
   if (width > 0) {
-    const widthBuy = Math.round((buy * width) / volume)
-    const widthSell = width - widthBuy
-    return Array(4)
-      .fill(`${chalk[colors.gauge.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauge.sell]('\u2588'.repeat(widthSell))}`)
-      .join('\n')
+    GAUGES.forEach(window => {
+      const wTrades = trades.slice(0, window)
+      const buy = wTrades.reduce((buy, trade) => buy + (trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
+      const sell = wTrades.reduce((sell, trade) => sell + (!trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
+      const volume = buy + sell
+      const widthBuy = Math.round((buy * width) / volume)
+      const widthSell = width - widthBuy
+      lines.push(`${chalk[colors.gauge.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauge.sell]('\u2588'.repeat(widthSell))}`)
+    })
+    return lines.join('\n')
   }
   return ''
 }
@@ -332,6 +356,7 @@ const getPartialBlock = eighths => {
 const initialize = () => {
   const { screen, title } = store
   addBox('chart')
+  addBox('count')
   addBox('display')
   addBox('gauge')
   addBox('highway')
@@ -346,8 +371,11 @@ const initialize = () => {
     .pipe(debounceTime(500))
     .subscribe(() => {
       addBox('chart')
+      addBox('count')
+      addBox('display')
       addBox('gauge')
       addBox('highway')
+      addBox('log')
       addBox('polarvol')
       addBox('volume')
     })
@@ -356,7 +384,7 @@ const initialize = () => {
     drawTimeout: setTimeout(() => {
       store.drawInterval.unsubscribe()
       store.drawInterval = interval(1000).subscribe(draw)
-    }, 300000)
+    }, 900000)
   })
   updateStore({ message: `${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  ` })
   interval(2000).subscribe(() => {
@@ -423,11 +451,11 @@ const updateStore = updates => {
             if (!candles[timeframe][candleId]) {
               candles[timeframe][candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
               const candleIds = Object.keys(candles[timeframe]).sort()
-              if (candleIds.length > LENGTH_CANDLES[index]) {
+              if (candleIds.length > CANDLES_LENGTH[index]) {
                 do {
                   delete candles[timeframe][candleIds[0]]
                   candleIds.shift()
-                } while (candleIds.length > LENGTH_CANDLES[index])
+                } while (candleIds.length > CANDLES_LENGTH[index])
                 analyze(timeframe)
               } else if (candleIds.length === 2 && !charts.includes(timeframe)) {
                 updateStore({
@@ -446,10 +474,11 @@ const updateStore = updates => {
             candles[timeframe][candleId][marketMaker ? 'buy' : 'sell'] += newTrade.quantity
           })
           trades.unshift(newTrade)
-          if (trades.length > LENGTH_TRADES) {
+          const maxWindow = Math.max(...GAUGES)
+          if (trades.length > maxWindow) {
             do {
               trades.pop()
-            } while (trades.length > LENGTH_TRADES)
+            } while (trades.length > maxWindow)
           }
           updateStore({ directionColor: newTrade.price > trade?.price ? colors.display.priceUp : newTrade.price < trade?.price ? colors.display.priceDown : directionColor ?? 'gray' })
           store.trade = newTrade
@@ -485,6 +514,11 @@ program
         colors: {
           chart: {
             background: 'yellow',
+            label: 'gray',
+            line: asciichart.darkgray
+          },
+          count: {
+            background: 'green',
             label: 'gray',
             line: asciichart.darkgray
           },
