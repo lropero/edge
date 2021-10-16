@@ -447,7 +447,7 @@ const updateStore = updates => {
           const minutes = date.getUTCHours() * 60 + date.getUTCMinutes()
           const prefix = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}`
           TIMEFRAMES.forEach((timeframe, index) => {
-            const candleId = `${prefix}-${Math.floor(minutes / timeframe)}`
+            const candleId = `${prefix}-${Math.floor(minutes / timeframe)}`.padStart(4, '0')
             if (!candles[timeframe][candleId]) {
               candles[timeframe][candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
               const candleIds = Object.keys(candles[timeframe]).sort()
