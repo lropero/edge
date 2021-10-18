@@ -12,6 +12,7 @@
  */
 
 import asciichart from 'asciichart'
+import axios from 'axios'
 import blessed from 'blessed'
 import CFonts from 'cfonts'
 import chalk from 'chalk'
@@ -24,13 +25,20 @@ import { format } from 'date-fns'
 import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
-const BINANCE_STREAM = 'wss://fstream.binance.com/ws'
+const BINANCE = {
+  openInterest: 'https://fapi.binance.com/fapi/v1/openInterest?symbol=',
+  stream: 'wss://fstream.binance.com/ws'
+}
 const CANDLES_LENGTH = [720, 360, 288, 192, 72]
 const GAUGES = [375, 750, 1500, 3000]
-const HIGHWAY_DELTAS = 100
-const HIGHWAY_LEVEL = 368
-const PLAY_MAC = 'afplay <SOUND>'
-const PLAY_WINDOWS = '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>'
+const HIGHWAY = {
+  deltas: 100,
+  level: 368
+}
+const PLAY = {
+  mac: 'afplay <SOUND>',
+  windows: '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>'
+}
 const TIMEFRAMES = [1, 3, 5, 15, 60]
 
 const store = {}
@@ -40,7 +48,7 @@ const addBox = type => {
     case 'chart': {
       const { colors, screen } = store
       const chart = blessed.box({
-        height: screen.height - 22,
+        height: screen.height - 30,
         style: { bg: colors.chart.background },
         top: 4,
         width: screen.width - 50
@@ -51,7 +59,7 @@ const addBox = type => {
     case 'count': {
       const { colors, screen } = store
       const count = blessed.box({
-        bottom: 13,
+        bottom: 21,
         height: 5,
         style: { bg: colors.count.background },
         width: screen.width - 50
@@ -103,6 +111,17 @@ const addBox = type => {
       append({ box: highway, type })
       break
     }
+    case 'interest': {
+      const { colors, screen } = store
+      const interest = blessed.box({
+        bottom: 0,
+        height: 8,
+        style: { bg: colors.interest.background },
+        width: screen.width - 50
+      })
+      append({ box: interest, type })
+      break
+    }
     case 'log': {
       const { colors } = store
       const log = blessed.box({
@@ -119,7 +138,7 @@ const addBox = type => {
     case 'polarvol': {
       const { colors, screen } = store
       const polarvol = blessed.box({
-        bottom: 8,
+        bottom: 16,
         height: 5,
         style: { bg: colors.polarvol.background },
         width: screen.width - 50
@@ -130,7 +149,7 @@ const addBox = type => {
     case 'volume': {
       const { colors, screen } = store
       const volume = blessed.box({
-        bottom: 0,
+        bottom: 8,
         height: 8,
         style: { bg: colors.volume.background },
         width: screen.width - 50
@@ -173,10 +192,10 @@ const calculateLevel = price => {
   const delta = Math.abs(price - trade.price)
   if (delta > 0) {
     deltas.push(delta)
-    if (deltas.length > HIGHWAY_DELTAS) {
+    if (deltas.length > HIGHWAY.deltas) {
       do {
         deltas.shift()
-      } while (deltas.length > HIGHWAY_DELTAS)
+      } while (deltas.length > HIGHWAY.deltas)
     }
     const average = deltas.reduce((average, delta) => average + delta, 0) / deltas.length
     let level = trade.level
@@ -185,10 +204,10 @@ const calculateLevel = price => {
     } else if (price > trade.price) {
       level += Math.round((delta / average) * 8)
     }
-    if (level > HIGHWAY_LEVEL) {
-      level = HIGHWAY_LEVEL
-    } else if (level < -HIGHWAY_LEVEL) {
-      level = -HIGHWAY_LEVEL
+    if (level > HIGHWAY.level) {
+      level = HIGHWAY.level
+    } else if (level < -HIGHWAY.level) {
+      level = -HIGHWAY.level
     }
     return level
   }
@@ -256,6 +275,19 @@ const draw = () => {
             }
           )
         )
+        const plot = values
+          .slice(-width)
+          .filter(candle => 'openInterest' in candle)
+          .map(candle => candle.openInterest)
+        if (plot.length) {
+          boxes.interest.setContent(
+            asciichart.plot(plot, {
+              colors: [colors.interest.line],
+              format: openInterest => chalk[colors.interest.label](openInterest.toFixed(0).padStart(8)),
+              height: 7
+            })
+          )
+        }
         const volDiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
         const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
         boxes.polarvol.setContent(
@@ -277,14 +309,14 @@ const draw = () => {
             height: 7
           })
         )
-        if (screen.height - 22 > 0) {
+        if (screen.height - 30 > 0) {
           boxes.chart.setContent(
             asciichart.plot(
               values.slice(-width).map(candle => candle.close),
               {
                 colors: [colors.chart.line],
                 format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-                height: screen.height - 23
+                height: screen.height - 31
               }
             )
           )
@@ -312,8 +344,8 @@ const getGauges = () => {
   if (width > 0) {
     GAUGES.forEach(window => {
       const wTrades = trades.slice(0, window)
-      const buy = wTrades.reduce((buy, trade) => buy + (trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
-      const sell = wTrades.reduce((sell, trade) => sell + (!trade.marketMaker ? parseFloat(trade.quantity) : 0), 0)
+      const buy = wTrades.reduce((buy, trade) => buy + (trade.marketTaker ? parseFloat(trade.quantity) : 0), 0)
+      const sell = wTrades.reduce((sell, trade) => sell + (!trade.marketTaker ? parseFloat(trade.quantity) : 0), 0)
       const volume = buy + sell
       const widthBuy = Math.round((buy * width) / volume)
       const widthSell = width - widthBuy
@@ -330,6 +362,25 @@ const getLine = trade => {
   const blocks = Math.floor(level / 8)
   const eighths = level - blocks * 8
   return `${' '.repeat(48 - blocks - (eighths ? 1 : 0))}${chalk[colors.highway[trade.level > 0 ? 'up' : 'down']](`${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`)}`
+}
+
+const getOpenInterest = async updateOpenInterest => {
+  const { candles } = store
+  try {
+    const timeframes = Object.keys(updateOpenInterest)
+    if (timeframes.length) {
+      const { pair } = store
+      const response = await axios.get(`${BINANCE.openInterest}${pair}`)
+      if (response.status === 200 && response.data) {
+        const { openInterest } = response.data
+        timeframes.forEach(timeframe => {
+          candles[timeframe][updateOpenInterest[timeframe]].openInterest = parseFloat(openInterest)
+        })
+      }
+    }
+  } catch (error) {
+    log(error.toString())
+  }
 }
 
 const getPartialBlock = eighths => {
@@ -360,11 +411,12 @@ const initialize = () => {
   addBox('display')
   addBox('gauges')
   addBox('highway')
+  addBox('interest')
   addBox('log')
   addBox('polarvol')
   addBox('volume')
-  screen.key('n', () => cycleChart(true))
   screen.key('m', () => cycleChart())
+  screen.key('n', () => cycleChart(true))
   screen.key('q', () => process.exit())
   screen.title = title
   fromEvent(screen, 'resize')
@@ -375,6 +427,7 @@ const initialize = () => {
       addBox('display')
       addBox('gauges')
       addBox('highway')
+      addBox('interest')
       addBox('log')
       addBox('polarvol')
       addBox('volume')
@@ -399,7 +452,7 @@ const log = message => {
 }
 
 const play = sound => {
-  exec((process.platform === 'win32' ? PLAY_WINDOWS : PLAY_MAC).replace('<SOUND>', sound))
+  exec((process.platform === 'win32' ? PLAY.windows : PLAY.mac).replace('<SOUND>', sound))
 }
 
 const start = () => {
@@ -441,16 +494,20 @@ const updateStore = updates => {
         case 'trade': {
           const { candles, charts, colors, directionColor, trade, trades } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
-          const newTrade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
+          const newTrade = { marketTaker: !marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
           newTrade.level = calculateLevel(newTrade.price)
           const date = new Date(newTrade.tradeTime)
           const minutes = date.getUTCHours() * 60 + date.getUTCMinutes()
           const prefix = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}`
+          const updateOpenInterest = {}
           TIMEFRAMES.forEach((timeframe, index) => {
-            const candleId = `${prefix}-${Math.floor(minutes / timeframe)}`.padStart(4, '0')
+            const candleId = `${prefix}-${`${Math.floor(minutes / timeframe)}`.padStart(4, '0')}`
             if (!candles[timeframe][candleId]) {
               candles[timeframe][candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
               const candleIds = Object.keys(candles[timeframe]).sort()
+              if (candleIds[candleIds.length - 2]) {
+                updateOpenInterest[timeframe] = candleIds[candleIds.length - 2]
+              }
               if (candleIds.length > CANDLES_LENGTH[index]) {
                 do {
                   delete candles[timeframe][candleIds[0]]
@@ -471,8 +528,9 @@ const updateStore = updates => {
             candles[timeframe][candleId].close = newTrade.price
             candles[timeframe][candleId].count++
             candles[timeframe][candleId].volume += newTrade.quantity
-            candles[timeframe][candleId][marketMaker ? 'buy' : 'sell'] += newTrade.quantity
+            candles[timeframe][candleId][newTrade.marketTaker ? 'buy' : 'sell'] += newTrade.quantity
           })
+          getOpenInterest(updateOpenInterest)
           trades.unshift(newTrade)
           const maxWindow = Math.max(...GAUGES)
           if (trades.length > maxWindow) {
@@ -498,7 +556,7 @@ program
   .argument('<pair>', 'pair')
   .action(async pair => {
     const { version } = await jsonfile.readFile('./package.json')
-    const webSocket = new WebSocket(BINANCE_STREAM)
+    const webSocket = new WebSocket(BINANCE.stream)
     webSocket.on('error', error => {
       console.error(error.message)
     })
@@ -539,9 +597,14 @@ program
             down: 'red',
             up: 'green'
           },
+          interest: {
+            background: 'blue',
+            label: 'white',
+            line: asciichart.default
+          },
           log: {
             background: 'blue',
-            date: 'black',
+            date: 'cyan',
             foreground: 'white'
           },
           polarvol: {
