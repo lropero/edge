@@ -214,6 +214,16 @@ const calculateLevel = price => {
   return trade.level
 }
 
+const connect = () => {
+  const { pair, webSocket } = store
+  webSocket.send(
+    JSON.stringify({
+      method: 'SUBSCRIBE',
+      params: [`${pair.toLowerCase()}@aggTrade`]
+    })
+  )
+}
+
 const cycleChart = (previous = false) => {
   const { charts, currentChart, drawInterval, drawTimeout } = store
   if (charts.length > 1) {
@@ -232,15 +242,18 @@ const cycleChart = (previous = false) => {
   }
   drawTimeout && clearTimeout(drawTimeout)
   drawInterval.unsubscribe()
-  store.drawInterval = interval(50).subscribe(draw)
-  store.drawTimeout = setTimeout(() => {
-    store.drawInterval.unsubscribe()
-    store.drawInterval = interval(250).subscribe(draw)
-  }, 900000)
+  updateStore({ drawInterval: interval(50).subscribe(draw) })
+  updateStore({
+    drawTimeout: setTimeout(() => {
+      store.drawInterval.unsubscribe()
+      store.drawInterval = interval(250).subscribe(draw)
+    }, 900000)
+  })
 }
 
 const draw = () => {
   const { boxes, candles, chartsActive, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
+  boxes.log.setContent(messages.join('\n'))
   if (trade) {
     const pairRender = CFonts.render(`${pair}${currentChart ? ` ${currentChart}m` : ''}`, {
       colors: [colors.display[chartsActive.includes(currentChart) ? 'pairActive' : 'pair']],
@@ -253,18 +266,31 @@ const draw = () => {
       space: false
     })
     boxes.display.setContent(`${pairRender.string}\n${priceRender.string}`)
+    boxes.gauges.setContent(getGauges())
     boxes.highway.setContent(
       `${trades
         .slice(0, screen.height - 12)
         .map(trade => getLine(trade))
         .join('\n')}`
     )
-    boxes.log.setContent(messages.join('\n'))
-    boxes.gauges.setContent(getGauges())
     if (currentChart) {
       const values = Object.values(candles[currentChart])
       const width = screen.width - 60
       if (values.length > 1 && width > 1) {
+        if (screen.height - 30 > 0) {
+          boxes.chart.setContent(
+            asciichart.plot(
+              values.slice(-width).map(candle => candle.close),
+              {
+                colors: [colors.chart.line],
+                format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
+                height: screen.height - 31
+              }
+            )
+          )
+        } else {
+          boxes.chart.setContent('')
+        }
         boxes.count.setContent(
           asciichart.plot(
             values.slice(-width).map(candle => candle.count),
@@ -309,29 +335,11 @@ const draw = () => {
             height: 7
           })
         )
-        if (screen.height - 30 > 0) {
-          boxes.chart.setContent(
-            asciichart.plot(
-              values.slice(-width).map(candle => candle.close),
-              {
-                colors: [colors.chart.line],
-                format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-                height: screen.height - 31
-              }
-            )
-          )
-        } else {
-          boxes.chart.setContent('')
-        }
       } else {
-        boxes.chart.setContent('')
-        boxes.polarvol.setContent('')
-        boxes.volume.setContent('')
+        setContentBlank()
       }
     } else {
-      boxes.chart.setContent('')
-      boxes.polarvol.setContent('')
-      boxes.volume.setContent('')
+      setContentBlank()
     }
   }
   screen.render()
@@ -443,7 +451,15 @@ const initialize = () => {
   interval(2000).subscribe(() => {
     updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
   })
-  draw()
+  interval(30000).subscribe(() => {
+    const { webSocket } = store
+    webSocket.send(
+      JSON.stringify({
+        id: 1337,
+        method: 'LIST_SUBSCRIPTIONS'
+      })
+    )
+  })
 }
 
 const log = message => {
@@ -455,20 +471,33 @@ const play = sound => {
   exec((process.platform === 'win32' ? PLAY.windows : PLAY.mac).replace('<SOUND>', sound))
 }
 
+const setContentBlank = () => {
+  const { boxes } = store
+  boxes.chart.setContent('')
+  boxes.count.setContent('')
+  boxes.interest.setContent('')
+  boxes.polarvol.setContent('')
+  boxes.volume.setContent('')
+}
+
 const start = () => {
-  const { pair, webSocket } = store
+  const { webSocket } = store
   try {
     initialize()
     webSocket.on('message', message => {
       const { e, ...rest } = JSON.parse(message)
-      e === 'aggTrade' && updateStore({ trade: rest })
+      switch (e) {
+        case 'aggTrade':
+          return updateStore({ trade: rest })
+        default: {
+          if (rest.id === 1337 && rest.result.length === 0) {
+            connect()
+            log('Stream reconnected')
+          }
+        }
+      }
     })
-    webSocket.send(
-      JSON.stringify({
-        method: 'SUBSCRIBE',
-        params: [`${pair.toLowerCase()}@aggTrade`]
-      })
-    )
+    connect()
   } catch (error) {
     console.log(`${chalk.gray(format(new Date(), 'HH:mm:ss'))} ${chalk.red(figures.cross)} ${error.toString()}`)
     process.exit()
@@ -516,11 +545,11 @@ const updateStore = updates => {
                 analyze(timeframe)
               } else if (candleIds.length === 2 && !charts.includes(timeframe)) {
                 updateStore({
-                  charts: TIMEFRAMES.reduce((charts, tf) => {
-                    if (store.charts.includes(tf) || tf === timeframe) {
-                      charts.push(tf)
+                  charts: TIMEFRAMES.reduce((chrts, tf) => {
+                    if (charts.includes(tf) || tf === timeframe) {
+                      chrts.push(tf)
                     }
-                    return charts
+                    return chrts
                   }, [])
                 })
               }
@@ -542,9 +571,8 @@ const updateStore = updates => {
           store.trade = newTrade
           break
         }
-        default: {
+        default:
           store[key] = updates[key]
-        }
       }
     } else {
       store[key] = updates[key]
