@@ -393,22 +393,30 @@ const getOpenInterest = async updateOpenInterest => {
 
 const getPartialBlock = eighths => {
   switch (eighths) {
-    case 0:
+    case 0: {
       return ''
-    case 1:
+    }
+    case 1: {
       return '\u{2595}'
-    case 2:
+    }
+    case 2: {
       return '\u{1FB87}'
-    case 3:
+    }
+    case 3: {
       return '\u{1FB88}'
-    case 4:
+    }
+    case 4: {
       return '\u{2590}'
-    case 5:
+    }
+    case 5: {
       return '\u{1FB89}'
-    case 6:
+    }
+    case 6: {
       return '\u{1FB8A}'
-    case 7:
+    }
+    case 7: {
       return '\u{1FB8B}'
+    }
   }
 }
 
@@ -487,8 +495,9 @@ const start = () => {
     webSocket.on('message', message => {
       const { e, ...rest } = JSON.parse(message)
       switch (e) {
-        case 'aggTrade':
+        case 'aggTrade': {
           return updateStore({ trade: rest })
+        }
         default: {
           if (rest.id === 1337 && rest.result.length === 0) {
             connect()
@@ -571,8 +580,9 @@ const updateStore = updates => {
           store.trade = newTrade
           break
         }
-        default:
+        default: {
           store[key] = updates[key]
+        }
       }
     } else {
       store[key] = updates[key]
