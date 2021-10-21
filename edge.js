@@ -161,7 +161,7 @@ const addBox = type => {
 }
 
 const analyze = timeframe => {
-  const { candles, chartsActive, pair } = store
+  const { candles, pair } = store
   const values = Object.values(candles[timeframe]).slice(0, -1)
   const volDiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
   const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
@@ -169,9 +169,6 @@ const analyze = timeframe => {
   if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
     log(`${pair} ${timeframe}m ${polarvol[polarvol.length - 1] === 1 ? chalk.green('⬆') : chalk.red('⬇')}`)
     play('signal.mp3')
-  }
-  if (!chartsActive.includes(timeframe)) {
-    updateStore({ chartsActive: [...chartsActive, timeframe] })
   }
 }
 
@@ -225,20 +222,20 @@ const connect = () => {
 }
 
 const cycleChart = (previous = false) => {
-  const { charts, currentChart, drawInterval, drawTimeout } = store
-  if (charts.length > 1) {
-    let index = charts.indexOf(currentChart)
+  const { currentChart, drawInterval, drawTimeout } = store
+  if (TIMEFRAMES.length > 1) {
+    let index = TIMEFRAMES.indexOf(currentChart)
     if (previous) {
       index--
     } else {
       index++
     }
     if (index < 0) {
-      index = charts.length - 1
-    } else if (index === charts.length) {
+      index = TIMEFRAMES.length - 1
+    } else if (index === TIMEFRAMES.length) {
       index = 0
     }
-    updateStore({ currentChart: charts[index] })
+    updateStore({ currentChart: TIMEFRAMES[index] })
   }
   drawTimeout && clearTimeout(drawTimeout)
   drawInterval.unsubscribe()
@@ -252,11 +249,11 @@ const cycleChart = (previous = false) => {
 }
 
 const draw = () => {
-  const { boxes, candles, chartsActive, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
+  const { boxes, candles, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
   boxes.log.setContent(messages.join('\n'))
   if (trade) {
     const pairRender = CFonts.render(`${pair}${currentChart ? ` ${currentChart}m` : ''}`, {
-      colors: [colors.display[chartsActive.includes(currentChart) ? 'pairActive' : 'pair']],
+      colors: [colors.display.pair],
       font: 'tiny',
       space: false
     })
@@ -448,6 +445,7 @@ const initialize = () => {
       addBox('highway')
       addBox('log')
     })
+  updateStore({ currentChart: TIMEFRAMES[0] })
   updateStore({ drawInterval: interval(50).subscribe(draw) })
   updateStore({
     drawTimeout: setTimeout(() => {
@@ -518,19 +516,13 @@ const updateStore = updates => {
   Object.keys(updates).forEach(key => {
     if (initialized) {
       switch (key) {
-        case 'charts': {
-          const { currentChart } = store
-          !currentChart && updateStore({ currentChart: updates[key][0] })
-          store.charts = updates[key]
-          break
-        }
         case 'message': {
           const { messages } = store
-          store.messages = [...messages, updates[key]]
+          store.messages = [updates[key], ...messages]
           break
         }
         case 'trade': {
-          const { candles, charts, colors, directionColor, trade, trades } = store
+          const { candles, colors, directionColor, trade, trades } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
           const newTrade = { marketTaker: !marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
           newTrade.level = calculateLevel(newTrade.price)
@@ -551,16 +543,9 @@ const updateStore = updates => {
                   delete candles[timeframe][candleIds[0]]
                   candleIds.shift()
                 } while (candleIds.length > CANDLES_LENGTH[index])
+              }
+              if (candleIds.length > Math.round(CANDLES_LENGTH[index] / 10)) {
                 analyze(timeframe)
-              } else if (candleIds.length === 2 && !charts.includes(timeframe)) {
-                updateStore({
-                  charts: TIMEFRAMES.reduce((chrts, tf) => {
-                    if (charts.includes(tf) || tf === timeframe) {
-                      chrts.push(tf)
-                    }
-                    return chrts
-                  }, [])
-                })
               }
             }
             candles[timeframe][candleId].close = newTrade.price
@@ -605,8 +590,6 @@ program
           candles[timeframe] = {}
           return candles
         }, {}),
-        charts: [],
-        chartsActive: [],
         colors: {
           chart: {
             background: 'yellow',
@@ -621,7 +604,6 @@ program
           display: {
             background: 'black',
             pair: process.platform === 'win32' ? 'gray' : 'yellow',
-            pairActive: 'white',
             priceDown: 'red',
             priceUp: 'green'
           },
