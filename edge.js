@@ -453,7 +453,6 @@ const initialize = () => {
       store.drawInterval = interval(250).subscribe(draw)
     }, 900000)
   })
-  updateStore({ message: `${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  ` })
   interval(2000).subscribe(() => {
     updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
   })
@@ -518,7 +517,7 @@ const updateStore = updates => {
       switch (key) {
         case 'message': {
           const { messages } = store
-          store.messages = [updates[key], ...messages]
+          store.messages = [messages[0], updates[key], ...messages.slice(1)]
           break
         }
         case 'trade': {
@@ -646,8 +645,6 @@ program
           style: 'currency'
         }),
         deltas: [],
-        initialized: true,
-        messages: [],
         pair,
         rotationVolume: [0, 1, 2],
         screen: blessed.screen({
@@ -658,6 +655,10 @@ program
         title: `Edge v${version}`,
         trades: [],
         webSocket
+      })
+      updateStore({
+        initialized: true,
+        messages: [`${store.title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  `]
       })
       start()
     })
