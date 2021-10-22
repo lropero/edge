@@ -16,7 +16,6 @@ import axios from 'axios'
 import blessed from 'blessed'
 import CFonts from 'cfonts'
 import chalk from 'chalk'
-import figures from 'figures'
 import jsonfile from 'jsonfile'
 import WebSocket from 'ws'
 import { debounceTime } from 'rxjs/operators'
@@ -219,6 +218,25 @@ const connect = () => {
       params: [`${pair.toLowerCase()}@aggTrade`]
     })
   )
+  resetWatchdog()
+}
+
+const createWebSocket = () => {
+  const webSocket = new WebSocket(BINANCE.stream)
+  webSocket.on('message', message => {
+    const { e, ...rest } = JSON.parse(message)
+    switch (e) {
+      case 'aggTrade': {
+        return updateStore({ trade: rest })
+      }
+      default: {
+        if (rest.id === 1337 && rest.result.length === 1) {
+          resetWatchdog()
+        }
+      }
+    }
+  })
+  return webSocket
 }
 
 const cycleChart = (previous = false) => {
@@ -445,13 +463,14 @@ const initialize = () => {
       addBox('highway')
       addBox('log')
     })
-  updateStore({ currentChart: TIMEFRAMES[0] })
-  updateStore({ drawInterval: interval(50).subscribe(draw) })
   updateStore({
+    drawInterval: interval(50).subscribe(draw),
     drawTimeout: setTimeout(() => {
       store.drawInterval.unsubscribe()
       store.drawInterval = interval(250).subscribe(draw)
-    }, 900000)
+    }, 900000),
+    initialized: true,
+    messages: [`${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  `]
   })
   interval(2000).subscribe(() => {
     updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
@@ -465,6 +484,7 @@ const initialize = () => {
       })
     )
   })
+  connect()
 }
 
 const log = message => {
@@ -476,6 +496,20 @@ const play = sound => {
   exec((process.platform === 'win32' ? PLAY.windows : PLAY.mac).replace('<SOUND>', sound))
 }
 
+const resetWatchdog = () => {
+  const { reconnectTimeout } = store
+  reconnectTimeout && clearTimeout(reconnectTimeout)
+  updateStore({
+    reconnectTimeout: setTimeout(() => {
+      log('Disconnected, attempting to reconnect')
+      const webSocket = createWebSocket()
+      webSocket.on('open', () => {
+        updateStore({ webSocket })
+      })
+    }, 60000)
+  })
+}
+
 const setContentBlank = () => {
   const { boxes } = store
   boxes.chart.setContent('')
@@ -483,37 +517,6 @@ const setContentBlank = () => {
   boxes.interest.setContent('')
   boxes.polarvol.setContent('')
   boxes.volume.setContent('')
-}
-
-const start = () => {
-  const { webSocket } = store
-  try {
-    initialize()
-    webSocket.on('message', message => {
-      const { reconnectTimeout } = store
-      const { e, ...rest } = JSON.parse(message)
-      switch (e) {
-        case 'aggTrade': {
-          return updateStore({ trade: rest })
-        }
-        default: {
-          if (rest.id === 1337 && rest.result.length > 0) {
-            reconnectTimeout && clearTimeout(reconnectTimeout)
-            updateStore({
-              reconnectTimeout: setTimeout(() => {
-                log('Stream disconnected, attempting to reconnect')
-                connect()
-              }, 60000)
-            })
-          }
-        }
-      }
-    })
-    connect()
-  } catch (error) {
-    console.log(`${chalk.gray(format(new Date(), 'HH:mm:ss'))} ${chalk.red(figures.cross)} ${error.toString()}`)
-    process.exit()
-  }
 }
 
 const updateStore = updates => {
@@ -570,6 +573,11 @@ const updateStore = updates => {
           store.trade = newTrade
           break
         }
+        case 'webSocket': {
+          store.webSocket = updates[key]
+          connect()
+          break
+        }
         default: {
           store[key] = updates[key]
         }
@@ -584,10 +592,7 @@ program
   .argument('<pair>', 'pair')
   .action(async pair => {
     const { version } = await jsonfile.readFile('./package.json')
-    const webSocket = new WebSocket(BINANCE.stream)
-    webSocket.on('error', error => {
-      console.error(error.message)
-    })
+    const webSocket = createWebSocket()
     webSocket.on('open', () => {
       updateStore({
         boxes: {},
@@ -650,6 +655,7 @@ program
           minimumFractionDigits: 2,
           style: 'currency'
         }),
+        currentChart: TIMEFRAMES[0],
         deltas: [],
         pair,
         rotationVolume: [0, 1, 2],
@@ -662,11 +668,7 @@ program
         trades: [],
         webSocket
       })
-      updateStore({
-        initialized: true,
-        messages: [`${store.title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  `]
-      })
-      start()
+      initialize()
     })
   })
   .parse(process.argv)
