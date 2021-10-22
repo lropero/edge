@@ -456,7 +456,7 @@ const initialize = () => {
   interval(2000).subscribe(() => {
     updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
   })
-  interval(30000).subscribe(() => {
+  interval(25000).subscribe(() => {
     const { webSocket } = store
     webSocket.send(
       JSON.stringify({
@@ -490,15 +490,21 @@ const start = () => {
   try {
     initialize()
     webSocket.on('message', message => {
+      const { reconnectTimeout } = store
       const { e, ...rest } = JSON.parse(message)
       switch (e) {
         case 'aggTrade': {
           return updateStore({ trade: rest })
         }
         default: {
-          if (rest.id === 1337 && rest.result.length === 0) {
-            connect()
-            log('Stream reconnected')
+          if (rest.id === 1337 && rest.result.length > 0) {
+            reconnectTimeout && clearTimeout(reconnectTimeout)
+            updateStore({
+              reconnectTimeout: setTimeout(() => {
+                log('Stream disconnected, attempting to reconnect')
+                connect()
+              }, 60000)
+            })
           }
         }
       }
