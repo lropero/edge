@@ -64,7 +64,7 @@ const addBox = type => {
     }
     case 'volume': {
       const { screen } = store
-      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'gray' }, width: screen.width })
+      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'white' }, width: screen.width })
       append({ box, type })
       break
     }
