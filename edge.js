@@ -52,7 +52,7 @@ const addBox = type => {
     }
     case 'polarvol': {
       const { screen } = store
-      const box = blessed.box({ bottom: 8, height: 5, style: { bg: 'blue' }, width: screen.width })
+      const box = blessed.box({ bottom: 8, height: 5, style: { bg: 'red' }, width: screen.width })
       append({ box, type })
       break
     }
@@ -64,7 +64,7 @@ const addBox = type => {
     }
     case 'volume': {
       const { screen } = store
-      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'white' }, width: screen.width })
+      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'blue' }, width: screen.width })
       append({ box, type })
       break
     }
@@ -143,12 +143,12 @@ const draw = () => {
       boxes.chart.setContent('')
     }
     if (screen.height - 18 > 0) {
-      const colors = [asciichart.black, asciichart.green, asciichart.red]
+      const colors = [asciichart.white, asciichart.green, asciichart.red]
       const volume = values.map(candle => candle.volumeBuy + candle.volumeSell)
       const volumeBuy = values.map(candle => candle.volumeBuy)
       const volumeSell = values.map(candle => candle.volumeSell)
       const series = [volume, volumeBuy, volumeSell]
-      boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk.black(volume.toFixed(2).padStart(9)), height: 7 }))
+      boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk.white(volume.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.volume.setContent('')
     }
@@ -156,7 +156,7 @@ const draw = () => {
       const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
       const max = Math.max(...diffs.map(diff => Math.abs(diff)))
       const polarvol = diffs.map(diff => diff / max)
-      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.white(polarvol.toFixed(2).padStart(9)), height: 4 }))
+      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.black], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
     } else {
       boxes.polarvol.setContent('')
     }
