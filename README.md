@@ -4,8 +4,8 @@ Trading edge.
 
 ### Requires
 
-- [Node v16.13.0](https://nodejs.org/)
-- npm v8.1.2
+- [Node v18.15.0](https://nodejs.org/)
+- npm v9.6.2
 
 ### Installation
 
@@ -16,5 +16,15 @@ $ npm ci
 ### Usage
 
 ```sh
-$ node edge.js <PAIR>
+$ node edge.js <SYMBOL> # e.g. 'node edge.js BTCUSDT'
+```
+
+### Options
+
+##### `-s` / `--size`
+
+Candle size in seconds (defaults to 60)
+
+```sh
+node edge.js <SYMBOL> -s 300 # 5m candles
 ```

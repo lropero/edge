@@ -1,34 +1,36 @@
 {
   "name": "edge",
-  "version": "0.1.0",
-  "description": "Trading edge.",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Edge.",
+  "license": "UNLICENSED",
+  "author": "Luciano Ropero <lropero@gmail.com>",
+  "type": "module",
   "scripts": {
-    "clean": "npx rimraf npm-*.log && npx rimraf package-lock.json && npx rimraf node_modules && npm cache verify",
-    "lint": "npx prettier-standard --lint",
-    "nuke": "npm run clean && npm install",
-    "start": "node edge.js BTCUSDT",
-    "upgrade": "npx upgradeps -n"
+    "audit": "npx upgradeps -v",
+    "clean": "npx rimraf node_modules && npx rimraf package-lock.json",
+    "lint": "npx prettier --write . && npx standard --fix",
+    "nuke": "npm run clean && npm cache verify && npm install",
+    "sort": "npx sort-package-json",
+    "start": "node edge.js BTCUSDT"
   },
   "dependencies": {
-    "asciichart": "^1.5.25",
-    "axios": "^0.24.0",
-    "blessed": "^0.1.81",
-    "cfonts": "^2.10.0",
-    "chalk": "^4.1.2",
-    "commander": "^8.3.0",
-    "date-fns": "^2.25.0",
-    "jsonfile": "^6.1.0",
-    "rxjs": "^7.4.0",
-    "ws": "^8.2.3"
+    "asciichart": "1.5.25",
+    "blessed": "0.1.81",
+    "cfonts": "3.1.1",
+    "chalk": "5.2.0",
+    "commander": "10.0.0",
+    "date-fns": "2.29.3",
+    "figures": "5.0.0",
+    "jsonfile": "6.1.0",
+    "lodash": "4.17.21",
+    "ws": "8.13.0"
   },
   "devDependencies": {
-    "prettier-standard": "^16.4.1",
-    "rimraf": "^3.0.2",
-    "upgradeps": "^1.4.3"
-  },
-  "author": "Luciano Ropero <lropero@gmail.com>",
-  "exports": "./edge.js",
-  "license": "UNLICENSED",
-  "private": true,
-  "type": "module"
+    "prettier": "2.8.7",
+    "rimraf": "4.4.1",
+    "sort-package-json": "2.4.1",
+    "standard": "17.0.0",
+    "upgradeps": "2.0.5"
+  }
 }

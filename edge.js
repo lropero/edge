@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Copyright (c) 2021, Luciano Ropero <lropero@gmail.com>
+ * Copyright (c) 2023, Luciano Ropero <lropero@gmail.com>
  *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
@@ -11,163 +11,75 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+import _ from 'lodash'
 import asciichart from 'asciichart'
-import axios from 'axios'
 import blessed from 'blessed'
-import CFonts from 'cfonts'
+import cfonts from 'cfonts'
 import chalk from 'chalk'
+import figures from 'figures'
 import jsonfile from 'jsonfile'
 import WebSocket from 'ws'
-import { debounceTime } from 'rxjs/operators'
 import { exec } from 'child_process'
 import { format } from 'date-fns'
-import { fromEvent, interval } from 'rxjs'
 import { program } from 'commander'
 
-const BINANCE = {
-  openInterest: 'https://fapi.binance.com/fapi/v1/openInterest?symbol=',
-  stream: 'wss://fstream.binance.com/ws'
-}
-const CANDLES_LENGTH = [720, 360, 288, 192, 72]
-const GAUGES = [375, 750, 1500, 3000]
-const HIGHWAY = {
-  deltas: 100,
-  level: 368
-}
-const PLAY = {
-  mac: 'afplay <SOUND>',
-  windows: '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>'
-}
-const TIMEFRAMES = [1, 3, 5, 15, 60]
+const BINANCE = 'wss://fstream.binance.com/ws'
+const PLAY = { darwin: 'afplay <SOUND>', win32: '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>' }
 
 const store = {}
 
 const addBox = type => {
   switch (type) {
     case 'chart': {
-      const { colors, screen } = store
-      const chart = blessed.box({
-        height: screen.height - 30,
-        style: { bg: colors.chart.background },
-        top: 4,
-        width: screen.width - 50
-      })
-      append({ box: chart, type })
-      break
-    }
-    case 'count': {
-      const { colors, screen } = store
-      const count = blessed.box({
-        bottom: 21,
-        height: 5,
-        style: { bg: colors.count.background },
-        width: screen.width - 50
-      })
-      append({ box: count, type })
+      const { screen } = store
+      const box = blessed.box({ height: screen.height - 26, style: { bg: 'yellow' }, top: 5, width: screen.width })
+      append({ box, type })
       break
     }
     case 'display': {
-      const { colors, screen } = store
-      const display = blessed.box({
-        align: 'right',
-        height: 4,
-        right: 1,
-        style: { bg: colors.display.background },
-        top: 0,
-        width: 49
-      })
-      append({ box: display, type })
-      screen.append(
-        blessed.box({
-          height: 4,
-          right: 0,
-          style: { bg: colors.display.background },
-          top: 0,
-          width: 1
-        })
-      )
+      const { symbol } = store
+      const priceBox = blessed.box({ height: 2, left: symbol.length * 4 + 1, style: { bg: 'black' }, top: 0 })
+      const symbolBox = blessed.box({ height: 2, style: { bg: 'black' }, top: 0 })
+      append({ box: symbolBox, type: 'symbol' })
+      append({ box: priceBox, type: 'price' })
       break
     }
-    case 'gauges': {
-      const { colors, screen } = store
-      const gauges = blessed.box({
-        height: 4,
-        style: { bg: colors.gauges.background },
-        width: screen.width - 50
-      })
-      append({ box: gauges, type })
-      break
-    }
-    case 'highway': {
-      const { colors, screen } = store
-      const highway = blessed.box({
-        height: screen.height - 12,
-        right: 0,
-        style: { bg: colors.highway.background },
-        top: 4,
-        width: 50
-      })
-      append({ box: highway, type })
-      break
-    }
-    case 'interest': {
-      const { colors, screen } = store
-      const interest = blessed.box({
-        bottom: 0,
-        height: 8,
-        style: { bg: colors.interest.background },
-        width: screen.width - 50
-      })
-      append({ box: interest, type })
-      break
-    }
-    case 'log': {
-      const { colors } = store
-      const log = blessed.box({
-        align: 'right',
-        bottom: 0,
-        height: 8,
-        right: 0,
-        style: { bg: colors.log.background, fg: colors.log.foreground },
-        width: 50
-      })
-      append({ box: log, type })
+    case 'info': {
+      const { screen } = store
+      const box = blessed.box({ height: 3, style: { bg: 'black' }, top: 2, width: screen.width })
+      append({ box, type })
       break
     }
     case 'polarvol': {
-      const { colors, screen } = store
-      const polarvol = blessed.box({
-        bottom: 16,
-        height: 5,
-        style: { bg: colors.polarvol.background },
-        width: screen.width - 50
-      })
-      append({ box: polarvol, type })
+      const { screen } = store
+      const box = blessed.box({ bottom: 8, height: 5, style: { bg: 'blue' }, width: screen.width })
+      append({ box, type })
+      break
+    }
+    case 'tick': {
+      const { screen } = store
+      const box = blessed.box({ bottom: 0, height: 8, style: { bg: 'black' }, width: screen.width })
+      append({ box, type })
       break
     }
     case 'volume': {
-      const { colors, screen } = store
-      const volume = blessed.box({
-        bottom: 8,
-        height: 8,
-        style: { bg: colors.volume.background },
-        width: screen.width - 50
-      })
-      append({ box: volume, type })
+      const { screen } = store
+      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'gray' }, width: screen.width })
+      append({ box, type })
       break
     }
   }
 }
 
-const analyze = timeframe => {
-  const { candles, pair } = store
-  const values = Object.values(candles[timeframe]).slice(0, -1)
-  const volDiff = values.map(candle => (candle.buy - candle.sell) * candle.volume)
-  const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
-  const polarvol = volDiff.map(value => value / maxVolDiff)
+const analyze = () => {
+  const { candles } = store
+  const values = Object.values(candles).slice(0, -1)
+  const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
+  const max = Math.max(...diffs.map(diff => Math.abs(diff)))
+  const polarvol = diffs.map(diff => diff / max)
   if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
-    log(`${pair} ${timeframe}m ${polarvol[polarvol.length - 1] === 1 ? chalk.green('⬆') : chalk.red('⬇')}`)
-    play('signal.mp3')
+    log({ message: polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇'), type: 'info' })
+    play('signal')
   }
 }
 
@@ -180,400 +92,239 @@ const append = ({ box, type }) => {
   updateStore({ boxes: { ...boxes, [type]: box } })
 }
 
-const calculateLevel = price => {
-  const { deltas, trade } = store
-  if (!trade) {
-    return 0
-  }
-  const delta = Math.abs(price - trade.price)
-  if (delta > 0) {
-    deltas.push(delta)
-    if (deltas.length > HIGHWAY.deltas) {
-      do {
-        deltas.shift()
-      } while (deltas.length > HIGHWAY.deltas)
-    }
-    const average = deltas.reduce((average, delta) => average + delta, 0) / deltas.length
-    let level = trade.level
-    if (price < trade.price) {
-      level -= Math.round((delta / average) * 8)
-    } else if (price > trade.price) {
-      level += Math.round((delta / average) * 8)
-    }
-    if (level > HIGHWAY.level) {
-      level = HIGHWAY.level
-    } else if (level < -HIGHWAY.level) {
-      level = -HIGHWAY.level
-    }
-    return level
-  }
-  return trade.level
-}
-
 const connect = () => {
-  const { pair, webSocket } = store
-  webSocket.send(
-    JSON.stringify({
-      method: 'SUBSCRIBE',
-      params: [`${pair.toLowerCase()}@aggTrade`]
-    })
-  )
+  const { symbol, timers, webSocket } = store
+  timers.list && clearInterval(timers.list)
+  webSocket.send(JSON.stringify({ method: 'SUBSCRIBE', params: [`${symbol.toLowerCase()}@aggTrade`] }))
+  log({ message: 'socket connected', type: 'success' })
+  timers.list = setInterval(() => {
+    const { webSocket } = store
+    webSocket.send(JSON.stringify({ id: 1337, method: 'LIST_SUBSCRIPTIONS' }))
+  }, 25000)
   resetWatchdog()
 }
 
-const createWebSocket = () => {
-  const webSocket = new WebSocket(BINANCE.stream)
-  webSocket.on('message', message => {
-    const { e, ...rest } = JSON.parse(message)
-    switch (e) {
-      case 'aggTrade': {
-        return updateStore({ trade: rest })
-      }
-      default: {
-        if (rest.id === 1337 && rest.result.length === 1) {
-          resetWatchdog()
+const createWebSocket = () =>
+  new Promise((resolve, reject) => {
+    const webSocket = new WebSocket(BINANCE)
+    webSocket.on('error', error => reject(error))
+    webSocket.on('message', message => {
+      const { e, ...rest } = JSON.parse(message)
+      switch (e) {
+        case 'aggTrade': {
+          updateStore({ trade: rest })
+          break
+        }
+        default: {
+          if (rest.id === 1337 && rest.result.length === 1) {
+            resetWatchdog()
+          }
         }
       }
-    }
+    })
+    webSocket.on('open', () => resolve(webSocket))
   })
-  return webSocket
-}
-
-const cycleChart = (previous = false) => {
-  const { currentChart, drawInterval, drawTimeout } = store
-  if (TIMEFRAMES.length > 1) {
-    let index = TIMEFRAMES.indexOf(currentChart)
-    if (previous) {
-      index--
-    } else {
-      index++
-    }
-    if (index < 0) {
-      index = TIMEFRAMES.length - 1
-    } else if (index === TIMEFRAMES.length) {
-      index = 0
-    }
-    updateStore({ currentChart: TIMEFRAMES[index] })
-  }
-  drawTimeout && clearTimeout(drawTimeout)
-  drawInterval.unsubscribe()
-  updateStore({ drawInterval: interval(50).subscribe(draw) })
-  updateStore({
-    drawTimeout: setTimeout(() => {
-      store.drawInterval.unsubscribe()
-      store.drawInterval = interval(250).subscribe(draw)
-    }, 900000)
-  })
-}
 
 const draw = () => {
-  const { boxes, candles, colors, currency, currentChart, directionColor, messages, pair, rotationVolume, screen, trade, trades } = store
-  boxes.log.setContent(messages.join('\n'))
-  if (trade) {
-    const pairRender = CFonts.render(`${pair}${currentChart ? ` ${currentChart}m` : ''}`, {
-      colors: [colors.display.pair],
-      font: 'tiny',
-      space: false
-    })
-    const priceRender = CFonts.render(currency.format(trade.price), {
-      colors: [directionColor],
-      font: 'tiny',
-      space: false
-    })
-    boxes.display.setContent(`${pairRender.string}\n${priceRender.string}`)
-    boxes.gauges.setContent(getGauges())
-    boxes.highway.setContent(
-      `${trades
-        .slice(0, screen.height - 12)
-        .map(trade => getLine(trade))
-        .join('\n')}`
-    )
-    if (currentChart) {
-      const values = Object.values(candles[currentChart])
-      const width = screen.width - 60
-      if (values.length > 1 && width > 1) {
-        if (screen.height - 30 > 0) {
-          boxes.chart.setContent(
-            asciichart.plot(
-              values.slice(-width).map(candle => candle.close),
-              {
-                colors: [colors.chart.line],
-                format: close => chalk[colors.chart.label](close.toFixed(2).padStart(8)),
-                height: screen.height - 31
-              }
-            )
-          )
-        } else {
-          boxes.chart.setContent('')
-        }
-        boxes.count.setContent(
-          asciichart.plot(
-            values.slice(-width).map(candle => candle.count),
-            {
-              colors: [colors.count.line],
-              format: count => chalk[colors.count.label](count.toFixed(0).padStart(8)),
-              height: 4
-            }
-          )
-        )
-        const plot = values
-          .slice(-width)
-          .filter(candle => 'openInterest' in candle)
-          .map(candle => candle.openInterest)
-        if (plot.length) {
-          boxes.interest.setContent(
-            asciichart.plot(plot, {
-              colors: [colors.interest.line],
-              format: openInterest => chalk[colors.interest.label](openInterest.toFixed(0).padStart(8)),
-              height: 7
-            })
-          )
-        }
-        const volDiff = values.slice(-width).map(candle => (candle.buy - candle.sell) * candle.volume)
-        const maxVolDiff = Math.max(...volDiff.map(value => Math.abs(value)))
-        boxes.polarvol.setContent(
-          asciichart.plot(
-            volDiff.map(value => value / maxVolDiff),
-            {
-              colors: [colors.polarvol.line],
-              format: close => chalk[colors.polarvol.label](close.toFixed(2).padStart(8)),
-              height: 4
-            }
-          )
-        )
-        const lineColors = [colors.volume.buy, colors.volume.sell, colors.volume.line]
-        const series = [values.slice(-width).map(candle => candle.buy), values.slice(-width).map(candle => candle.sell), values.slice(-width).map(candle => candle.volume)]
-        boxes.volume.setContent(
-          asciichart.plot([series[rotationVolume[0]], series[rotationVolume[1]], series[rotationVolume[2]]], {
-            colors: [lineColors[rotationVolume[0]], lineColors[rotationVolume[1]], lineColors[rotationVolume[2]]],
-            format: volume => chalk[colors.volume.label](volume.toFixed(2).padStart(8)),
-            height: 7
-          })
-        )
-      } else {
-        setContentBlank()
-      }
+  const { boxes, candles, currency, directionColor, lastTrade, messages, rotation, screen, symbol } = store
+  if (lastTrade) {
+    const symbolRender = cfonts.render(symbol, { colors: ['yellow'], font: 'tiny', space: false })
+    boxes.symbol.setContent(symbolRender.string)
+    const priceRender = cfonts.render(currency.format(lastTrade.price), { colors: [directionColor], font: 'tiny', space: false })
+    boxes.price.setContent(priceRender.string)
+  }
+  boxes.info.setContent(messages.map(message => ` ${message}`).join('\n'))
+  const values = Object.values(candles).slice(-(screen.width - 11))
+  if (values.length > 2) {
+    if (screen.height - 26 > 0) {
+      const close = values.map(candle => candle.close)
+      boxes.chart.setContent(asciichart.plot(close, { colors: [asciichart.black], format: close => chalk.black(close.toFixed(2).padStart(9)), height: screen.height - 27 }))
     } else {
-      setContentBlank()
+      boxes.chart.setContent('')
+    }
+    if (screen.height - 18 > 0) {
+      const colors = [asciichart.black, asciichart.green, asciichart.red]
+      const volume = values.map(candle => candle.volumeBuy + candle.volumeSell)
+      const volumeBuy = values.map(candle => candle.volumeBuy)
+      const volumeSell = values.map(candle => candle.volumeSell)
+      const series = [volume, volumeBuy, volumeSell]
+      boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk.black(volume.toFixed(2).padStart(9)), height: 7 }))
+    } else {
+      boxes.volume.setContent('')
+    }
+    if (screen.height - 13 > 0) {
+      const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
+      const max = Math.max(...diffs.map(diff => Math.abs(diff)))
+      const polarvol = diffs.map(diff => diff / max)
+      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.white(polarvol.toFixed(2).padStart(9)), height: 4 }))
+    } else {
+      boxes.polarvol.setContent('')
+    }
+    if (screen.height - 5 > 0) {
+      const colors = [asciichart.yellow, asciichart.cyan, asciichart.magenta]
+      const tick = values.map(candle => candle.tickBuy + candle.tickSell)
+      const tickBuy = values.map(candle => candle.tickBuy)
+      const tickSell = values.map(candle => candle.tickSell)
+      const series = [tick, tickBuy, tickSell]
+      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.yellow(tick.toFixed(2).padStart(9)), height: 7 }))
+    } else {
+      boxes.tick.setContent('')
     }
   }
   screen.render()
 }
 
-const getGauges = () => {
-  const { colors, screen, trades } = store
-  const lines = []
-  const width = screen.width - 50
-  if (width > 0) {
-    GAUGES.forEach(window => {
-      const wTrades = trades.slice(0, window)
-      const buy = wTrades.reduce((buy, trade) => buy + (trade.marketTaker ? parseFloat(trade.quantity) : 0), 0)
-      const sell = wTrades.reduce((sell, trade) => sell + (!trade.marketTaker ? parseFloat(trade.quantity) : 0), 0)
-      const volume = buy + sell
-      const widthBuy = Math.round((buy * width) / volume)
-      const widthSell = width - widthBuy
-      lines.push(`${chalk[colors.gauges.buy]('\u2588'.repeat(widthBuy))}${chalk[colors.gauges.sell]('\u2588'.repeat(widthSell))}`)
-    })
-    return lines.join('\n')
-  }
-  return ''
+const log = ({ message, type = '' }) => {
+  updateStore({ message: `${logType(type)}${type !== '' ? `${chalk.white(format(new Date(), 'EEE dd/MM HH:mm:ss'))} ` : ''}${message}` })
 }
 
-const getLine = trade => {
-  const { colors } = store
-  const level = Math.abs(trade.level)
-  const blocks = Math.floor(level / 8)
-  const eighths = level - blocks * 8
-  return `${' '.repeat(48 - blocks - (eighths ? 1 : 0))}${chalk[colors.highway[trade.level > 0 ? 'up' : 'down']](`${getPartialBlock(eighths)}${'\u2588'.repeat(blocks)}`)}`
-}
-
-const getOpenInterest = async updateOpenInterest => {
-  const { candles } = store
-  try {
-    const timeframes = Object.keys(updateOpenInterest)
-    if (timeframes.length) {
-      const { pair } = store
-      const response = await axios.get(`${BINANCE.openInterest}${pair}`)
-      if (response.status === 200 && response.data) {
-        const { openInterest } = response.data
-        timeframes.forEach(timeframe => {
-          candles[timeframe][updateOpenInterest[timeframe]].openInterest = parseFloat(openInterest)
-        })
-      }
-    }
-  } catch (error) {
-    log(error.toString())
-  }
-}
-
-const getPartialBlock = eighths => {
-  switch (eighths) {
-    case 0: {
+const logType = type => {
+  switch (type) {
+    case 'error':
+      return `${chalk.red(figures.cross)} `
+    case 'info':
+      return `${chalk.blue(figures.bullet)} `
+    case 'success':
+      return `${chalk.green(figures.tick)} `
+    case 'warning':
+      return `${chalk.yellow(figures.warning)} `
+    default:
       return ''
-    }
-    case 1: {
-      return '\u{2595}'
-    }
-    case 2: {
-      return '\u{1FB87}'
-    }
-    case 3: {
-      return '\u{1FB88}'
-    }
-    case 4: {
-      return '\u{2590}'
-    }
-    case 5: {
-      return '\u{1FB89}'
-    }
-    case 6: {
-      return '\u{1FB8A}'
-    }
-    case 7: {
-      return '\u{1FB8B}'
-    }
   }
-}
-
-const initialize = () => {
-  const { screen, title } = store
-  addBox('gauges')
-  addBox('chart')
-  addBox('count')
-  addBox('polarvol')
-  addBox('volume')
-  addBox('interest')
-  addBox('display')
-  addBox('highway')
-  addBox('log')
-  screen.key('m', () => cycleChart())
-  screen.key('n', () => cycleChart(true))
-  screen.key('q', () => process.exit())
-  screen.title = title
-  fromEvent(screen, 'resize')
-    .pipe(debounceTime(500))
-    .subscribe(() => {
-      addBox('gauges')
-      addBox('chart')
-      addBox('count')
-      addBox('polarvol')
-      addBox('volume')
-      addBox('interest')
-      addBox('display')
-      addBox('highway')
-      addBox('log')
-    })
-  updateStore({
-    drawInterval: interval(50).subscribe(draw),
-    drawTimeout: setTimeout(() => {
-      store.drawInterval.unsubscribe()
-      store.drawInterval = interval(250).subscribe(draw)
-    }, 900000),
-    initialized: true,
-    messages: [`${title} ${chalk.gray('|')} ${chalk.cyan('n')}/${chalk.cyan('m')} cycle charts - ${chalk.cyan('q')}uit  `]
-  })
-  interval(2000).subscribe(() => {
-    updateStore({ rotationVolume: store.rotationVolume.map(index => (index + 1 === 3 ? 0 : index + 1)) })
-  })
-  interval(25000).subscribe(() => {
-    const { webSocket } = store
-    webSocket.send(
-      JSON.stringify({
-        id: 1337,
-        method: 'LIST_SUBSCRIPTIONS'
-      })
-    )
-  })
-  connect()
-}
-
-const log = message => {
-  const { colors } = store
-  updateStore({ message: `${message} ${chalk[colors.log.date](format(new Date(), 'HH:mm:ss'))}  ` })
 }
 
 const play = sound => {
-  exec((process.platform === 'win32' ? PLAY.windows : PLAY.mac).replace('<SOUND>', sound))
+  PLAY[process.platform] && exec(PLAY[process.platform].replace('<SOUND>', `mp3/${sound}.mp3`))
 }
 
 const resetWatchdog = () => {
-  const { reconnectTimeout } = store
-  reconnectTimeout && clearTimeout(reconnectTimeout)
-  updateStore({
-    reconnectTimeout: setTimeout(() => {
-      log('Disconnected, attempting to reconnect')
-      const webSocket = createWebSocket()
-      webSocket.on('open', () => {
-        updateStore({ webSocket })
-      })
-    }, 60000)
-  })
+  const { timers } = store
+  timers.reconnect && clearTimeout(timers.reconnect)
+  timers.reconnect = setTimeout(async () => {
+    log({ message: 'disconnected, attempting to reconnect...', type: 'warning' })
+    try {
+      const webSocket = await createWebSocket()
+      updateStore({ webSocket })
+    } catch (error) {
+      resetWatchdog()
+    }
+  }, 60000)
 }
 
-const setContentBlank = () => {
-  const { boxes } = store
-  boxes.chart.setContent('')
-  boxes.count.setContent('')
-  boxes.interest.setContent('')
-  boxes.polarvol.setContent('')
-  boxes.volume.setContent('')
+const rotateVolume = () => {
+  const { rotation } = store
+  updateStore({ rotation: rotation.map(index => (index + 1 === rotation.length ? 0 : index + 1)) })
+}
+
+const setAlert = () => {
+  const { screen } = store
+  const $ = blessed.box({ content: '$', height: 1, left: 30, parent: screen, style: { bg: 'magenta' }, top: 2, width: 1 })
+  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: 31, parent: screen, style: { bg: 'magenta' }, top: 2, width: 11 })
+  input.on('cancel', () => {
+    $.destroy()
+    input.destroy()
+  })
+  input.on('submit', () => {
+    const alert = parseFloat(input.getValue().replace(',', '.'))
+    updateStore({ alert: alert > 0 ? alert : 0 })
+    $.destroy()
+    input.destroy()
+  })
+  input.focus()
+}
+
+const start = title => {
+  const { screen } = store
+  addBox('chart')
+  addBox('volume')
+  addBox('polarvol')
+  addBox('tick')
+  addBox('info')
+  addBox('display')
+  screen.key('a', setAlert)
+  screen.key('q', process.exit)
+  screen.on(
+    'resize',
+    _.debounce(() => {
+      addBox('chart')
+      addBox('volume')
+      addBox('polarvol')
+      addBox('tick')
+      addBox('info')
+      addBox('display')
+    }, 500)
+  )
+  screen.title = title
+  updateStore({ initialized: true })
+  connect()
+  setInterval(draw, 50)
+  setInterval(rotateVolume, 2000)
 }
 
 const updateStore = updates => {
   const { initialized } = store
   Object.keys(updates).forEach(key => {
-    if (initialized) {
+    if (!initialized) {
+      store[key] = updates[key]
+    } else {
       switch (key) {
+        case 'alert': {
+          const { currency, header, lastTrade } = store
+          if (lastTrade) {
+            const alert = updates[key]
+            if (alert > 0) {
+              store.alert = alert
+              store.messages[0] = `${header} ${chalk[alert > lastTrade.price ? 'cyan' : 'magenta'](currency.format(updates[key]))}`
+            } else {
+              delete store.alert
+              store.messages[0] = `${header}`
+            }
+          }
+          break
+        }
         case 'message': {
           const { messages } = store
-          store.messages = [messages[0], updates[key], ...messages.slice(1)]
+          store.messages = [messages[0], updates[key], ...messages.slice(1, 100)]
           break
         }
         case 'trade': {
-          const { candles, colors, directionColor, trade, trades } = store
+          const { alert, candles, currency, directionColor, lastTrade, size } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
-          const newTrade = { marketTaker: !marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
-          newTrade.level = calculateLevel(newTrade.price)
-          const date = new Date(newTrade.tradeTime)
-          const minutes = date.getUTCHours() * 60 + date.getUTCMinutes()
-          const prefix = `${date.getUTCFullYear()}-${`${date.getUTCMonth() + 1}`.padStart(2, '0')}-${`${date.getUTCDate()}`.padStart(2, '0')}`
-          const updateOpenInterest = {}
-          TIMEFRAMES.forEach((timeframe, index) => {
-            const candleId = `${prefix}-${`${Math.floor(minutes / timeframe)}`.padStart(4, '0')}`
-            if (!candles[timeframe][candleId]) {
-              candles[timeframe][candleId] = { buy: 0, count: 0, sell: 0, volume: 0 }
-              const candleIds = Object.keys(candles[timeframe]).sort()
-              if (candleIds[candleIds.length - 2]) {
-                updateOpenInterest[timeframe] = candleIds[candleIds.length - 2]
-              }
-              if (candleIds.length > CANDLES_LENGTH[index]) {
-                do {
-                  delete candles[timeframe][candleIds[0]]
-                  candleIds.shift()
-                } while (candleIds.length > CANDLES_LENGTH[index])
-              }
-              if (candleIds.length > Math.round(CANDLES_LENGTH[index] / 10)) {
-                analyze(timeframe)
-              }
+          const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
+          if (alert && lastTrade) {
+            if (lastTrade.price < alert && trade.price >= alert) {
+              log({ message: chalk.green(currency.format(alert)), type: 'info' })
+              play('up')
+              updateStore({ alert: 0 })
+            } else if (lastTrade.price > alert && trade.price <= alert) {
+              log({ message: chalk.red(currency.format(alert)), type: 'info' })
+              play('down')
+              updateStore({ alert: 0 })
             }
-            candles[timeframe][candleId].close = newTrade.price
-            candles[timeframe][candleId].count++
-            candles[timeframe][candleId].volume += newTrade.quantity
-            candles[timeframe][candleId][newTrade.marketTaker ? 'buy' : 'sell'] += newTrade.quantity
-          })
-          getOpenInterest(updateOpenInterest)
-          trades.unshift(newTrade)
-          const maxWindow = Math.max(...GAUGES)
-          if (trades.length > maxWindow) {
-            do {
-              trades.pop()
-            } while (trades.length > maxWindow)
           }
-          updateStore({ directionColor: newTrade.price > trade?.price ? colors.display.priceUp : newTrade.price < trade?.price ? colors.display.priceDown : directionColor ?? 'gray' })
-          store.trade = newTrade
+          const id = Math.floor(trade.tradeTime / size)
+          if (!candles[id]) {
+            candles[id] = { tickBuy: 0, tickSell: 0, time: id * size, volumeBuy: 0, volumeSell: 0 }
+            const ids = Object.keys(candles).sort()
+            if (ids.length > 500) {
+              do {
+                delete candles[ids[0]]
+                ids.shift()
+              } while (ids.length > 500)
+              analyze()
+            }
+          }
+          candles[id].close = trade.price
+          candles[id].tickBuy += !trade.marketMaker ? 1 : 0
+          candles[id].tickSell += trade.marketMaker ? 1 : 0
+          candles[id].volumeBuy += !trade.marketMaker ? trade.quantity : 0
+          candles[id].volumeSell += trade.marketMaker ? trade.quantity : 0
+          updateStore({ directionColor: trade.price > lastTrade?.price ? 'green' : trade.price < lastTrade?.price ? 'red' : directionColor ?? 'white', lastTrade: trade })
           break
         }
         case 'webSocket': {
+          const { webSocket } = store
+          webSocket && webSocket.terminate()
           store.webSocket = updates[key]
           connect()
           break
@@ -582,93 +333,38 @@ const updateStore = updates => {
           store[key] = updates[key]
         }
       }
-    } else {
-      store[key] = updates[key]
     }
   })
 }
 
 program
-  .argument('<pair>', 'pair')
-  .action(async pair => {
-    const { version } = await jsonfile.readFile('./package.json')
-    const webSocket = createWebSocket()
-    webSocket.on('open', () => {
+  .argument('<symbol>', 'symbol')
+  .option('-s, --size <seconds>', 'candle size in seconds (defaults to 60)')
+  .action(async (symbol, options) => {
+    try {
+      const { description, name, version } = await jsonfile.readFile('./package.json')
+      const currency = new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' })
+      const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
+      const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
+      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
+      const webSocket = await createWebSocket()
       updateStore({
         boxes: {},
-        candles: TIMEFRAMES.reduce((candles, timeframe) => {
-          candles[timeframe] = {}
-          return candles
-        }, {}),
-        colors: {
-          chart: {
-            background: 'yellow',
-            label: 'gray',
-            line: asciichart.darkgray
-          },
-          count: {
-            background: 'green',
-            label: 'gray',
-            line: asciichart.darkgray
-          },
-          display: {
-            background: 'black',
-            pair: process.platform === 'win32' ? 'gray' : 'yellow',
-            priceDown: 'red',
-            priceUp: 'green'
-          },
-          gauges: {
-            background: 'black',
-            buy: 'cyan',
-            sell: 'magenta'
-          },
-          highway: {
-            background: 'black',
-            down: 'red',
-            up: 'green'
-          },
-          interest: {
-            background: 'blue',
-            label: 'white',
-            line: asciichart.default
-          },
-          log: {
-            background: 'blue',
-            date: 'cyan',
-            foreground: 'white'
-          },
-          polarvol: {
-            background: 'red',
-            label: 'black',
-            line: asciichart.default
-          },
-          volume: {
-            background: 'white',
-            buy: asciichart.cyan,
-            label: 'gray',
-            line: asciichart.darkgray,
-            sell: asciichart.magenta
-          }
-        },
-        currency: new Intl.NumberFormat('en-US', {
-          currency: 'USD',
-          minimumFractionDigits: 2,
-          style: 'currency'
-        }),
-        currentChart: TIMEFRAMES[0],
-        deltas: [],
-        pair,
-        rotationVolume: [0, 1, 2],
-        screen: blessed.screen({
-          forceUnicode: true,
-          fullUnicode: true,
-          smartCSR: true
-        }),
-        title: `Edge v${version}`,
-        trades: [],
+        candles: {},
+        currency,
+        header,
+        messages: [header],
+        rotation: [0, 1, 2],
+        screen,
+        size: size * 1000,
+        symbol,
+        timers: {},
         webSocket
       })
-      initialize()
-    })
+      start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
+    } catch (error) {
+      log({ message: error.toString(), type: 'error' })
+      process.exit()
+    }
   })
   .parse(process.argv)
