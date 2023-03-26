@@ -143,7 +143,7 @@ const draw = () => {
       boxes.chart.setContent('')
     }
     if (screen.height - 18 > 0) {
-      const colors = [asciichart.white, asciichart.green, asciichart.red]
+      const colors = [asciichart.yellow, asciichart.green, asciichart.red]
       const volume = values.map(candle => candle.volumeBuy + candle.volumeSell)
       const volumeBuy = values.map(candle => candle.volumeBuy)
       const volumeSell = values.map(candle => candle.volumeSell)
@@ -156,7 +156,7 @@ const draw = () => {
       const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
       const max = Math.max(...diffs.map(diff => Math.abs(diff)))
       const polarvol = diffs.map(diff => diff / max)
-      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.black], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
+      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
     } else {
       boxes.polarvol.setContent('')
     }
@@ -166,7 +166,7 @@ const draw = () => {
       const tickBuy = values.map(candle => candle.tickBuy)
       const tickSell = values.map(candle => candle.tickSell)
       const series = [tick, tickBuy, tickSell]
-      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.yellow(tick.toFixed(2).padStart(9)), height: 7 }))
+      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.white(tick.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.tick.setContent('')
     }

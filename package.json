@@ -12,7 +12,11 @@
     "lint": "npx prettier --write . && npx standard --fix",
     "nuke": "npm run clean && npm cache verify && npm install",
     "sort": "npx sort-package-json",
-    "start": "node edge.js BTCUSDT"
+    "start": "node edge.js BTCUSDT",
+    "start:15s": "node edge.js BTCUSDT -s 15",
+    "start:3m": "node edge.js BTCUSDT -s 180",
+    "start:5m": "node edge.js BTCUSDT -s 300",
+    "start:15m": "node edge.js BTCUSDT -s 900"
   },
   "dependencies": {
     "asciichart": "1.5.25",

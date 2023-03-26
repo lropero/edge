@@ -10,13 +10,20 @@ Trading edge.
 ### Installation
 
 ```sh
-$ npm ci
+npm ci
 ```
 
 ### Usage
 
 ```sh
-$ node edge.js <SYMBOL> # e.g. 'node edge.js BTCUSDT'
+node edge.js <SYMBOL> # e.g. 1m candles 'node edge.js BTCUSDT'
+```
+
+```sh
+npm run start # BTCUSDT 1m candles
+npm run start:3m # BTCUSDT 3m candles
+npm run start:5m # BTCUSDT 5m candles
+npm run start:15m # BTCUSDT 15m candles
 ```
 
 ### Options
@@ -26,5 +33,5 @@ $ node edge.js <SYMBOL> # e.g. 'node edge.js BTCUSDT'
 Candle size in seconds (defaults to 60)
 
 ```sh
-node edge.js <SYMBOL> -s 300 # 5m candles
+node edge.js <SYMBOL> -s <seconds> # e.g. 5m candles 'node edge.js BTCUSDT -s 300'
 ```
