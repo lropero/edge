@@ -217,9 +217,9 @@ const rotateVolume = () => {
 }
 
 const setAlert = () => {
-  const { screen } = store
-  const $ = blessed.box({ content: '$', height: 1, left: 30, parent: screen, style: { bg: 'magenta' }, top: 2, width: 1 })
-  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: 31, parent: screen, style: { bg: 'magenta' }, top: 2, width: 11 })
+  const { screen, size } = store
+  const $ = blessed.box({ content: '$', height: 1, left: 25 + `${size}`.length, parent: screen, style: { bg: 'blue' }, top: 2, width: 1 })
+  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: 26 + `${size}`.length, parent: screen, style: { bg: 'blue' }, top: 2, width: 11 })
   input.on('cancel', () => {
     $.destroy()
     input.destroy()
