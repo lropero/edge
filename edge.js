@@ -33,6 +33,8 @@ const addBox = type => {
     case 'chart': {
       const { screen } = store
       const box = blessed.box({ height: screen.height - 26, style: { bg: 'yellow' }, top: 5, width: screen.width })
+      const title = blessed.box({ content: 'Chart', height: 1, right: 0, parent: screen, style: { bg: 'yellow' }, top: 0, width: 5 })
+      box.append(title)
       append({ box, type })
       break
     }
@@ -52,19 +54,25 @@ const addBox = type => {
     }
     case 'polarvol': {
       const { screen } = store
-      const box = blessed.box({ bottom: 8, height: 5, style: { bg: 'red' }, width: screen.width })
+      const box = blessed.box({ bottom: 0, height: 5, style: { bg: 'red' }, width: screen.width })
+      const title = blessed.box({ content: 'Polarvol', height: 1, right: 0, parent: screen, style: { bg: 'red' }, top: 0, width: 8 })
+      box.append(title)
       append({ box, type })
       break
     }
     case 'tick': {
       const { screen } = store
-      const box = blessed.box({ bottom: 0, height: 8, style: { bg: 'black' }, width: screen.width })
+      const box = blessed.box({ bottom: 5, height: 8, style: { bg: 'black' }, width: screen.width })
+      const title = blessed.box({ content: 'Tick', height: 1, right: 0, parent: screen, style: { bg: 'black' }, top: 0, width: 4 })
+      box.append(title)
       append({ box, type })
       break
     }
     case 'volume': {
       const { screen } = store
       const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'blue' }, width: screen.width })
+      const title = blessed.box({ content: 'Volume', height: 1, right: 0, parent: screen, style: { bg: 'blue' }, top: 0, width: 6 })
+      box.append(title)
       append({ box, type })
       break
     }
@@ -74,12 +82,14 @@ const addBox = type => {
 const analyze = () => {
   const { candles } = store
   const values = Object.values(candles).slice(0, -1)
-  const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
+  const diffs = values.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
-  const polarvol = diffs.map(diff => diff / max)
-  if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
-    log({ message: polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇'), type: 'info' })
-    play('signal')
+  if (max > 0) {
+    const polarvol = diffs.map(diff => diff / max)
+    if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
+      log({ message: polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇'), type: 'info' })
+      play('signal')
+    }
   }
 }
 
@@ -143,7 +153,7 @@ const draw = () => {
       boxes.chart.setContent('')
     }
     if (screen.height - 18 > 0) {
-      const colors = [asciichart.yellow, asciichart.green, asciichart.red]
+      const colors = [asciichart.white, asciichart.green, asciichart.red]
       const volume = values.map(candle => candle.volumeBuy + candle.volumeSell)
       const volumeBuy = values.map(candle => candle.volumeBuy)
       const volumeSell = values.map(candle => candle.volumeSell)
@@ -152,23 +162,25 @@ const draw = () => {
     } else {
       boxes.volume.setContent('')
     }
-    if (screen.height - 13 > 0) {
-      const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.volumeBuy + candle.volumeSell))
-      const max = Math.max(...diffs.map(diff => Math.abs(diff)))
-      const polarvol = diffs.map(diff => diff / max)
-      boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
-    } else {
-      boxes.polarvol.setContent('')
-    }
-    if (screen.height - 5 > 0) {
+    if (screen.height - 10 > 0) {
       const colors = [asciichart.yellow, asciichart.cyan, asciichart.magenta]
       const tick = values.map(candle => candle.tickBuy + candle.tickSell)
       const tickBuy = values.map(candle => candle.tickBuy)
       const tickSell = values.map(candle => candle.tickSell)
       const series = [tick, tickBuy, tickSell]
-      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.white(tick.toFixed(2).padStart(9)), height: 7 }))
+      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.yellow(tick.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.tick.setContent('')
+    }
+    if (screen.height - 5 > 0) {
+      const diffs = values.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
+      const max = Math.max(...diffs.map(diff => Math.abs(diff)))
+      if (max > 0) {
+        const polarvol = diffs.map(diff => diff / max)
+        boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
+      }
+    } else {
+      boxes.polarvol.setContent('')
     }
   }
   screen.render()
@@ -237,8 +249,8 @@ const start = title => {
   const { screen } = store
   addBox('chart')
   addBox('volume')
-  addBox('polarvol')
   addBox('tick')
+  addBox('polarvol')
   addBox('info')
   addBox('display')
   screen.key('a', setAlert)
@@ -248,8 +260,8 @@ const start = title => {
     _.debounce(() => {
       addBox('chart')
       addBox('volume')
-      addBox('polarvol')
       addBox('tick')
+      addBox('polarvol')
       addBox('info')
       addBox('display')
     }, 500)
