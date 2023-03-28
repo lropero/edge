@@ -86,8 +86,8 @@ const analyze = () => {
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
-    if (Math.abs(polarvol[polarvol.length - 1]) === 1) {
-      log({ message: polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇'), type: 'info' })
+    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.95) {
+      log({ message: `${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100}`, type: 'info' })
       play('signal')
     }
   }
