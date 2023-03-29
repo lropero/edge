@@ -356,7 +356,7 @@ program
       const currency = new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' })
       const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
-      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
+      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('d')}ark ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
       updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
