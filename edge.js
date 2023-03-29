@@ -18,6 +18,7 @@ import cfonts from 'cfonts'
 import chalk from 'chalk'
 import figures from 'figures'
 import jsonfile from 'jsonfile'
+import stripAnsi from 'strip-ansi'
 import WebSocket from 'ws'
 import { exec } from 'child_process'
 import { format } from 'date-fns'
@@ -136,9 +137,9 @@ const createWebSocket = () =>
   })
 
 const draw = () => {
-  const { boxes, candles, currency, directionColor, lastTrade, messages, rotation, screen, symbol } = store
+  const { boxes, buffer, candles, currency, directionColor, lastTrade, messages, rotation, screen, symbol } = store
   if (lastTrade) {
-    const symbolRender = cfonts.render(symbol, { colors: ['yellow'], font: 'tiny', space: false })
+    const symbolRender = cfonts.render(symbol, { colors: [candles.length >= buffer ? 'yellow' : 'white'], font: 'tiny', space: false })
     boxes.symbol.setContent(symbolRender.string)
     const priceRender = cfonts.render(currency.format(lastTrade.price), { colors: [directionColor], font: 'tiny', space: false })
     boxes.price.setContent(priceRender.string)
@@ -229,9 +230,10 @@ const rotateVolume = () => {
 }
 
 const setAlert = () => {
-  const { screen, size } = store
-  const $ = blessed.box({ content: '$', height: 1, left: 25 + `${size}`.length, parent: screen, style: { bg: 'blue' }, top: 2, width: 1 })
-  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: 26 + `${size}`.length, parent: screen, style: { bg: 'blue' }, top: 2, width: 11 })
+  const { header, screen } = store
+  const left = stripAnsi(header).length + 2
+  const $ = blessed.box({ content: '$', height: 1, left, parent: screen, style: { bg: 'blue' }, top: 2, width: 1 })
+  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: left + 1, parent: screen, style: { bg: 'blue' }, top: 2, width: 11 })
   input.on('cancel', () => {
     $.destroy()
     input.destroy()
@@ -300,7 +302,7 @@ const updateStore = updates => {
           break
         }
         case 'trade': {
-          const { alert, candles, currency, directionColor, lastTrade, size } = store
+          const { alert, buffer, candles, currency, directionColor, lastTrade, size } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
           const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
           if (alert && lastTrade) {
@@ -318,11 +320,11 @@ const updateStore = updates => {
           if (!candles[id]) {
             candles[id] = { tickBuy: 0, tickSell: 0, time: id * size, volumeBuy: 0, volumeSell: 0 }
             const ids = Object.keys(candles).sort()
-            if (ids.length > 500) {
+            if (ids.length > buffer) {
               do {
                 delete candles[ids[0]]
                 ids.shift()
-              } while (ids.length > 500)
+              } while (ids.length > buffer)
               analyze()
             }
           }
@@ -360,19 +362,7 @@ program
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
       const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
-      updateStore({
-        boxes: {},
-        candles: {},
-        currency,
-        header,
-        messages: [header],
-        rotation: [0, 1, 2],
-        screen,
-        size: size * 1000,
-        symbol,
-        timers: {},
-        webSocket
-      })
+      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
     } catch (error) {
       log({ message: error.toString(), type: 'error' })
