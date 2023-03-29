@@ -30,49 +30,44 @@ const PLAY = { darwin: 'afplay <SOUND>', win32: '"C:\\Program Files\\VideoLAN\\V
 const store = {}
 
 const addBox = type => {
+  const { dark, screen, symbol } = store
   switch (type) {
     case 'chart': {
-      const { screen } = store
-      const box = blessed.box({ height: screen.height - 26, style: { bg: 'yellow' }, top: 5, width: screen.width })
-      const title = blessed.box({ content: 'Chart', height: 1, right: 0, parent: screen, style: { bg: 'yellow' }, top: 0, width: 5 })
+      const box = blessed.box({ height: screen.height - 26, style: { bg: dark ? 'black' : 'yellow' }, top: 5, width: screen.width })
+      const title = blessed.box({ content: 'Chart', height: 1, right: 0, style: { bg: dark ? 'black' : 'yellow', fg: dark ? 'yellow' : 'white' }, width: 5 })
       box.append(title)
       append({ box, type })
       break
     }
     case 'display': {
-      const { symbol } = store
-      const priceBox = blessed.box({ height: 2, left: symbol.length * 4 + 1, style: { bg: 'black' }, top: 0 })
-      const symbolBox = blessed.box({ height: 2, style: { bg: 'black' }, top: 0 })
+      const priceBox = blessed.box({ height: 2, left: symbol.length * 4 + 1, style: { bg: dark ? 'blue' : 'black' } })
+      const symbolBox = blessed.box({ height: 2, style: { bg: dark ? 'blue' : 'black' } })
       append({ box: symbolBox, type: 'symbol' })
       append({ box: priceBox, type: 'price' })
       break
     }
     case 'info': {
-      const { screen } = store
-      const box = blessed.box({ height: 3, style: { bg: 'black' }, top: 2, width: screen.width })
+      const box = blessed.box({ height: 3, style: { bg: dark ? 'blue' : 'black' }, top: 2, width: screen.width })
       append({ box, type })
       break
     }
     case 'polarvol': {
-      const { screen } = store
-      const box = blessed.box({ bottom: 0, height: 5, style: { bg: 'red' }, width: screen.width })
-      const title = blessed.box({ content: 'Polarvol', height: 1, right: 0, parent: screen, style: { bg: 'red' }, top: 0, width: 8 })
+      const box = blessed.box({ bottom: 0, height: 5, style: { bg: dark ? 'black' : 'red' }, width: screen.width })
+      const title = blessed.box({ content: 'Polarvol', height: 1, right: 0, style: { bg: dark ? 'black' : 'red', fg: dark ? 'yellow' : 'white' }, width: 8 })
       box.append(title)
       append({ box, type })
       break
     }
     case 'tick': {
-      const { screen } = store
       const box = blessed.box({ bottom: 5, height: 8, style: { bg: 'black' }, width: screen.width })
-      const title = blessed.box({ content: 'Tick', height: 1, right: 0, parent: screen, style: { bg: 'black' }, top: 0, width: 4 })
+      const title = blessed.box({ content: 'Tick', height: 1, right: 0, style: { bg: 'black', fg: dark ? 'yellow' : 'white' }, width: 4 })
       box.append(title)
       append({ box, type })
       break
     }
     case 'volume': {
-      const { screen } = store
-      const box = blessed.box({ bottom: 13, height: 8, style: { bg: 'blue' }, width: screen.width })
-      const title = blessed.box({ content: 'Volume', height: 1, right: 0, parent: screen, style: { bg: 'blue' }, top: 0, width: 6 })
+      const box = blessed.box({ bottom: 13, height: 8, style: { bg: dark ? 'black' : 'blue' }, width: screen.width })
+      const title = blessed.box({ content: 'Volume', height: 1, right: 0, style: { bg: dark ? 'black' : 'blue', fg: dark ? 'yellow' : 'white' }, width: 6 })
       box.append(title)
       append({ box, type })
       break
@@ -87,7 +82,7 @@ const analyze = () => {
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
-    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.95) {
+    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.9) {
       log({ message: `${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100}`, type: 'info' })
       play('signal')
     }
@@ -137,7 +132,7 @@ const createWebSocket = () =>
   })
 
 const draw = () => {
-  const { boxes, buffer, candles, currency, directionColor, lastTrade, messages, rotation, screen, symbol } = store
+  const { boxes, buffer, candles, currency, dark, directionColor, lastTrade, messages, rotation, screen, symbol } = store
   if (lastTrade) {
     const symbolRender = cfonts.render(symbol, { colors: [candles.length >= buffer ? 'yellow' : 'white'], font: 'tiny', space: false })
     boxes.symbol.setContent(symbolRender.string)
@@ -149,7 +144,7 @@ const draw = () => {
   if (values.length > 2) {
     if (screen.height - 26 > 0) {
       const close = values.map(candle => candle.close)
-      boxes.chart.setContent(asciichart.plot(close, { colors: [asciichart.black], format: close => chalk.black(close.toFixed(2).padStart(9)), height: screen.height - 27 }))
+      boxes.chart.setContent(asciichart.plot(close, { colors: [asciichart[dark ? 'yellow' : 'black']], format: close => chalk[dark ? 'yellow' : 'black'](close.toFixed(2).padStart(9)), height: screen.height - 27 }))
     } else {
       boxes.chart.setContent('')
     }
@@ -159,7 +154,7 @@ const draw = () => {
       const volumeBuy = values.map(candle => candle.volumeBuy)
       const volumeSell = values.map(candle => candle.volumeSell)
       const series = [volume, volumeBuy, volumeSell]
-      boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk.white(volume.toFixed(2).padStart(9)), height: 7 }))
+      boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk[dark ? 'blue' : 'white'](volume.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.volume.setContent('')
     }
@@ -169,7 +164,7 @@ const draw = () => {
       const tickBuy = values.map(candle => candle.tickBuy)
       const tickSell = values.map(candle => candle.tickSell)
       const series = [tick, tickBuy, tickSell]
-      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk.yellow(tick.toFixed(2).padStart(9)), height: 7 }))
+      boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk[dark ? 'white' : 'yellow'](tick.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.tick.setContent('')
     }
@@ -178,7 +173,7 @@ const draw = () => {
       const max = Math.max(...diffs.map(diff => Math.abs(diff)))
       if (max > 0) {
         const polarvol = diffs.map(diff => diff / max)
-        boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk.black(polarvol.toFixed(2).padStart(9)), height: 4 }))
+        boxes.polarvol.setContent(asciichart.plot(polarvol, { colors: [asciichart.white], format: polarvol => chalk[dark ? 'red' : 'black'](polarvol.toFixed(2).padStart(9)), height: 4 }))
       }
     } else {
       boxes.polarvol.setContent('')
@@ -210,6 +205,15 @@ const play = sound => {
   PLAY[process.platform] && exec(PLAY[process.platform].replace('<SOUND>', `mp3/${sound}.mp3`))
 }
 
+const resetLayout = () => {
+  addBox('chart')
+  addBox('volume')
+  addBox('tick')
+  addBox('polarvol')
+  addBox('info')
+  addBox('display')
+}
+
 const resetWatchdog = () => {
   const { timers } = store
   timers.reconnect && clearTimeout(timers.reconnect)
@@ -230,10 +234,10 @@ const rotateVolume = () => {
 }
 
 const setAlert = () => {
-  const { header, screen } = store
+  const { boxes, dark, header } = store
   const left = stripAnsi(header).length + 2
-  const $ = blessed.box({ content: '$', height: 1, left, parent: screen, style: { bg: 'blue' }, top: 2, width: 1 })
-  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: left + 1, parent: screen, style: { bg: 'blue' }, top: 2, width: 11 })
+  const $ = blessed.box({ content: '$', height: 1, left, parent: boxes.info, style: { bg: dark ? 'black' : 'blue' }, width: 1 })
+  const input = blessed.textbox({ height: 1, inputOnFocus: true, left: left + 1, parent: boxes.info, style: { bg: dark ? 'black' : 'blue' }, width: 11 })
   input.on('cancel', () => {
     $.destroy()
     input.destroy()
@@ -249,30 +253,22 @@ const setAlert = () => {
 
 const start = title => {
   const { screen } = store
-  addBox('chart')
-  addBox('volume')
-  addBox('tick')
-  addBox('polarvol')
-  addBox('info')
-  addBox('display')
+  resetLayout()
   screen.key('a', setAlert)
+  screen.key('d', toggleDark)
   screen.key('q', process.exit)
-  screen.on(
-    'resize',
-    _.debounce(() => {
-      addBox('chart')
-      addBox('volume')
-      addBox('tick')
-      addBox('polarvol')
-      addBox('info')
-      addBox('display')
-    }, 500)
-  )
+  screen.on('resize', _.debounce(resetLayout, 500))
   screen.title = title
   updateStore({ initialized: true })
   connect()
   setInterval(draw, 50)
   setInterval(rotateVolume, 2000)
+}
+
+const toggleDark = () => {
+  const { dark } = store
+  updateStore({ dark: !dark })
+  resetLayout()
 }
 
 const updateStore = updates => {
@@ -362,7 +358,7 @@ program
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
       const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
-      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, timers: {}, webSocket })
+      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
     } catch (error) {
       log({ message: error.toString(), type: 'error' })
