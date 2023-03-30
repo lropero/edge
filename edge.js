@@ -133,26 +133,27 @@ const createWebSocket = () =>
 
 const draw = () => {
   const { boxes, buffer, candles, currency, dark, directionColor, lastTrade, messages, rotation, screen, symbol } = store
+  const values = Object.values(candles)
   if (lastTrade) {
-    const symbolRender = cfonts.render(symbol, { colors: [candles.length >= buffer ? 'yellow' : 'white'], font: 'tiny', space: false })
+    const symbolRender = cfonts.render(symbol, { colors: [values.length >= buffer ? 'yellow' : 'white'], font: 'tiny', space: false })
     boxes.symbol.setContent(symbolRender.string)
     const priceRender = cfonts.render(currency.format(lastTrade.price), { colors: [directionColor], font: 'tiny', space: false })
     boxes.price.setContent(priceRender.string)
   }
   boxes.info.setContent(messages.map(message => ` ${message}`).join('\n'))
-  const values = Object.values(candles).slice(-(screen.width - 11))
-  if (values.length > 2) {
+  const slice = values.slice(-(screen.width - 11))
+  if (slice.length > 2) {
     if (screen.height - 26 > 0) {
-      const close = values.map(candle => candle.close)
+      const close = slice.map(candle => candle.close)
       boxes.chart.setContent(asciichart.plot(close, { colors: [asciichart[dark ? 'yellow' : 'black']], format: close => chalk[dark ? 'yellow' : 'black'](close.toFixed(2).padStart(9)), height: screen.height - 27 }))
     } else {
       boxes.chart.setContent('')
     }
     if (screen.height - 18 > 0) {
       const colors = [asciichart.white, asciichart.green, asciichart.red]
-      const volume = values.map(candle => candle.volumeBuy + candle.volumeSell)
-      const volumeBuy = values.map(candle => candle.volumeBuy)
-      const volumeSell = values.map(candle => candle.volumeSell)
+      const volume = slice.map(candle => candle.volumeBuy + candle.volumeSell)
+      const volumeBuy = slice.map(candle => candle.volumeBuy)
+      const volumeSell = slice.map(candle => candle.volumeSell)
       const series = [volume, volumeBuy, volumeSell]
       boxes.volume.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: volume => chalk[dark ? 'blue' : 'white'](volume.toFixed(2).padStart(9)), height: 7 }))
     } else {
@@ -160,16 +161,16 @@ const draw = () => {
     }
     if (screen.height - 10 > 0) {
       const colors = [asciichart.yellow, asciichart.cyan, asciichart.magenta]
-      const tick = values.map(candle => candle.tickBuy + candle.tickSell)
-      const tickBuy = values.map(candle => candle.tickBuy)
-      const tickSell = values.map(candle => candle.tickSell)
+      const tick = slice.map(candle => candle.tickBuy + candle.tickSell)
+      const tickBuy = slice.map(candle => candle.tickBuy)
+      const tickSell = slice.map(candle => candle.tickSell)
       const series = [tick, tickBuy, tickSell]
       boxes.tick.setContent(asciichart.plot([series[rotation[0]], series[rotation[1]], series[rotation[2]]], { colors: [colors[rotation[0]], colors[rotation[1]], colors[rotation[2]]], format: tick => chalk[dark ? 'white' : 'yellow'](tick.toFixed(2).padStart(9)), height: 7 }))
     } else {
       boxes.tick.setContent('')
     }
     if (screen.height - 5 > 0) {
-      const diffs = values.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
+      const diffs = slice.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
       const max = Math.max(...diffs.map(diff => Math.abs(diff)))
       if (max > 0) {
         const polarvol = diffs.map(diff => diff / max)
