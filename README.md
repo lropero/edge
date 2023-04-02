@@ -5,7 +5,7 @@ Trading edge.
 ### Requires
 
 - [Node v18.15.0](https://nodejs.org/)
-- npm v9.6.2
+- npm v9.6.3
 
 ### Installation
 

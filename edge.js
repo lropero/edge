@@ -82,8 +82,8 @@ const analyze = () => {
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
-    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.9) {
-      log({ message: `${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100}`, type: 'info' })
+    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.8) {
+      log({ message: `${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100} (${Math.round(polarvol[polarvol.length - 1] * 100) / 100})`, type: 'info' })
       play('signal')
     }
   }
@@ -192,7 +192,7 @@ const logType = type => {
     case 'error':
       return `${chalk.red(figures.cross)} `
     case 'info':
-      return `${chalk.blue(figures.bullet)} `
+      return `${chalk.magenta(figures.bullet)} `
     case 'success':
       return `${chalk.green(figures.tick)} `
     case 'warning':
@@ -318,11 +318,11 @@ const updateStore = updates => {
             candles[id] = { tickBuy: 0, tickSell: 0, time: id * size, volumeBuy: 0, volumeSell: 0 }
             const ids = Object.keys(candles).sort()
             if (ids.length > buffer) {
+              analyze()
               do {
                 delete candles[ids[0]]
                 ids.shift()
               } while (ids.length > buffer)
-              analyze()
             }
           }
           candles[id].close = trade.price
