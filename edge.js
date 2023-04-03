@@ -30,12 +30,17 @@ const PLAY = { darwin: 'afplay <SOUND>', win32: '"C:\\Program Files\\VideoLAN\\V
 const store = {}
 
 const addBox = type => {
-  const { dark, screen, symbol } = store
+  const { buffer, candles, dark, screen, symbol, threshold, timers } = store
   switch (type) {
     case 'chart': {
       const box = blessed.box({ height: screen.height - 26, style: { bg: dark ? 'black' : 'yellow' }, top: 5, width: screen.width })
       const title = blessed.box({ content: 'Chart', height: 1, right: 0, style: { bg: dark ? 'black' : 'yellow', fg: dark ? 'yellow' : 'white' }, width: 5 })
       box.append(title)
+      append({ box, type })
+      break
+    }
+    case 'disconnected': {
+      const box = blessed.box({ content: 'disconnected, attempting to reconnect...', height: 1, left: Math.round(screen.width / 2) - 20, style: { bg: 'red' }, top: 3, width: 40 })
       append({ box, type })
       break
     }
@@ -53,7 +58,8 @@ const addBox = type => {
     }
     case 'polarvol': {
       const box = blessed.box({ bottom: 0, height: 5, style: { bg: dark ? 'black' : 'red' }, width: screen.width })
-      const title = blessed.box({ content: 'Polarvol', height: 1, right: 0, style: { bg: dark ? 'black' : 'red', fg: dark ? 'yellow' : 'white' }, width: 8 })
+      const content = `Polarvol ${threshold}`
+      const title = blessed.box({ content, height: 1, right: 0, style: { bg: dark ? 'black' : 'red', fg: dark ? 'yellow' : 'white' }, width: content.length })
       box.append(title)
       append({ box, type })
       break
@@ -63,6 +69,21 @@ const addBox = type => {
       const title = blessed.box({ content: 'Tick', height: 1, right: 0, style: { bg: 'black', fg: dark ? 'yellow' : 'white' }, width: 4 })
       box.append(title)
       append({ box, type })
+      break
+    }
+    case 'unready': {
+      timers.unready && clearTimeout(timers.unready)
+      const amount = buffer - Object.keys(candles).length
+      const content = `Polarvol signal unready, awaiting ${amount} new candle${amount > 1 ? 's' : ''}`
+      const box = blessed.box({ content, height: 1, left: Math.round((screen.width - content.length) / 2), style: { bg: 'red' }, top: 3, width: content.length })
+      append({ box, type })
+      timers.unready = setTimeout(() => {
+        const { boxes } = store
+        if (boxes.unready) {
+          screen.remove(boxes.unready)
+          delete boxes.unready
+        }
+      }, 3000)
       break
     }
     case 'volume': {
@@ -75,15 +96,22 @@ const addBox = type => {
   }
 }
 
+const addBoxes = () => {
+  const { boxes } = store
+  const types = ['chart', 'volume', 'tick', 'polarvol', 'info', 'display']
+  types.forEach(type => addBox(type))
+  boxes.disconnected && addBox('disconnected')
+}
+
 const analyze = () => {
-  const { candles } = store
+  const { candles, threshold } = store
   const values = Object.values(candles).slice(0, -1)
   const diffs = values.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
-    if (Math.abs(polarvol[polarvol.length - 1]) >= 0.8) {
-      log({ message: `${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100} (${Math.round(polarvol[polarvol.length - 1] * 100) / 100})`, type: 'info' })
+    if (Math.abs(polarvol[polarvol.length - 1]) >= threshold) {
+      log(`${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100} (${Math.round(polarvol[polarvol.length - 1] * 100) / 100})`)
       play('signal')
     }
   }
@@ -102,7 +130,6 @@ const connect = () => {
   const { symbol, timers, webSocket } = store
   timers.list && clearInterval(timers.list)
   webSocket.send(JSON.stringify({ method: 'SUBSCRIBE', params: [`${symbol.toLowerCase()}@aggTrade`] }))
-  log({ message: 'socket connected', type: 'success' })
   timers.list = setInterval(() => {
     const { webSocket } = store
     webSocket.send(JSON.stringify({ id: 1337, method: 'LIST_SUBSCRIPTIONS' }))
@@ -183,22 +210,22 @@ const draw = () => {
   screen.render()
 }
 
-const log = ({ message, type = '' }) => {
-  updateStore({ message: `${logType(type)}${type !== '' ? `${chalk.white(format(new Date(), 'EEE dd/MM HH:mm:ss'))} ` : ''}${message}` })
+const log = message => {
+  updateStore({ message: `${chalk.magenta(figures.bullet)} ${chalk.white(format(new Date(), 'EEE dd/MM HH:mm:ss'))} ${message}` })
 }
 
-const logType = type => {
-  switch (type) {
-    case 'error':
-      return `${chalk.red(figures.cross)} `
-    case 'info':
-      return `${chalk.magenta(figures.bullet)} `
-    case 'success':
-      return `${chalk.green(figures.tick)} `
-    case 'warning':
-      return `${chalk.yellow(figures.warning)} `
-    default:
-      return ''
+const moveThreshold = direction => {
+  const { buffer, candles, threshold } = store
+  let newThreshold = threshold + 0.1 * (direction === 'up' ? 1 : -1)
+  if (newThreshold > 1) {
+    newThreshold = 1
+  } else if (newThreshold < 0.5) {
+    newThreshold = 0.5
+  }
+  updateStore({ threshold: Math.round(newThreshold * 10) / 10 })
+  addBoxes()
+  if (Object.keys(candles).length < buffer) {
+    addBox('unready')
   }
 }
 
@@ -206,20 +233,11 @@ const play = sound => {
   PLAY[process.platform] && exec(PLAY[process.platform].replace('<SOUND>', `mp3/${sound}.mp3`))
 }
 
-const resetLayout = () => {
-  addBox('chart')
-  addBox('volume')
-  addBox('tick')
-  addBox('polarvol')
-  addBox('info')
-  addBox('display')
-}
-
 const resetWatchdog = () => {
   const { timers } = store
   timers.reconnect && clearTimeout(timers.reconnect)
   timers.reconnect = setTimeout(async () => {
-    log({ message: 'disconnected, attempting to reconnect...', type: 'warning' })
+    addBox('disconnected')
     try {
       const webSocket = await createWebSocket()
       updateStore({ webSocket })
@@ -254,11 +272,13 @@ const setAlert = () => {
 
 const start = title => {
   const { screen } = store
-  resetLayout()
+  addBoxes()
   screen.key('a', setAlert)
   screen.key('d', toggleDark)
+  screen.key('down', () => moveThreshold('down'))
   screen.key('q', process.exit)
-  screen.on('resize', _.debounce(resetLayout, 500))
+  screen.key('up', () => moveThreshold('up'))
+  screen.on('resize', _.debounce(addBoxes, 500))
   screen.title = title
   updateStore({ initialized: true })
   connect()
@@ -269,7 +289,7 @@ const start = title => {
 const toggleDark = () => {
   const { dark } = store
   updateStore({ dark: !dark })
-  resetLayout()
+  addBoxes()
 }
 
 const updateStore = updates => {
@@ -299,16 +319,20 @@ const updateStore = updates => {
           break
         }
         case 'trade': {
-          const { alert, buffer, candles, currency, directionColor, lastTrade, size } = store
+          const { alert, boxes, buffer, candles, currency, directionColor, lastTrade, screen, size } = store
           const { m: marketMaker, p: price, q: quantity, T: tradeTime } = updates[key]
           const trade = { marketMaker, price: parseFloat(price), quantity: parseFloat(quantity), tradeTime }
+          if (boxes.disconnected) {
+            screen.remove(boxes.disconnected)
+            delete boxes.disconnected
+          }
           if (alert && lastTrade) {
             if (lastTrade.price < alert && trade.price >= alert) {
-              log({ message: chalk.green(currency.format(alert)), type: 'info' })
+              log(chalk.green(currency.format(alert)))
               play('up')
               updateStore({ alert: 0 })
             } else if (lastTrade.price > alert && trade.price <= alert) {
-              log({ message: chalk.red(currency.format(alert)), type: 'info' })
+              log(chalk.red(currency.format(alert)))
               play('down')
               updateStore({ alert: 0 })
             }
@@ -357,12 +381,12 @@ program
       const currency = new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' })
       const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
-      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('d')}ark ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
+      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(adjust signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
-      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, timers: {}, webSocket })
+      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, threshold: 1, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
     } catch (error) {
-      log({ message: error.toString(), type: 'error' })
+      console.log(error.toString())
       process.exit()
     }
   })
