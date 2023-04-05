@@ -106,12 +106,12 @@ const addBoxes = () => {
 const analyze = () => {
   const { candles, threshold } = store
   const values = Object.values(candles).slice(0, -1)
-  const diffs = values.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
+  const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.tickBuy + candle.tickSell))
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
     if (Math.abs(polarvol[polarvol.length - 1]) >= threshold) {
-      log(`${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(diffs[diffs.length - 1] * 100) / 100} (${Math.round(polarvol[polarvol.length - 1] * 100) / 100})`)
+      log(`${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(polarvol[polarvol.length - 1] * 100) / 100}`)
       play('signal')
     }
   }
@@ -124,6 +124,11 @@ const append = ({ box, type }) => {
   }
   screen.append(box)
   updateStore({ boxes: { ...boxes, [type]: box } })
+}
+
+const clear = () => {
+  const { messages } = store
+  store.messages = [messages[0]]
 }
 
 const connect = () => {
@@ -197,7 +202,7 @@ const draw = () => {
       boxes.tick.setContent('')
     }
     if (screen.height - 5 > 0) {
-      const diffs = slice.map(candle => (candle.volumeBuy / candle.tickBuy - candle.volumeSell / candle.tickSell) * (candle.tickBuy + candle.tickSell))
+      const diffs = slice.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.tickBuy + candle.tickSell))
       const max = Math.max(...diffs.map(diff => Math.abs(diff)))
       if (max > 0) {
         const polarvol = diffs.map(diff => diff / max)
@@ -274,6 +279,7 @@ const start = title => {
   const { screen } = store
   addBoxes()
   screen.key('a', setAlert)
+  screen.key('c', clear)
   screen.key('d', toggleDark)
   screen.key('down', () => moveThreshold('down'))
   screen.key('q', process.exit)
@@ -381,7 +387,7 @@ program
       const currency = new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' })
       const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
-      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(adjust signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
+      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
       updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, threshold: 1, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
