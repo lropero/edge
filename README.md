@@ -5,7 +5,7 @@ Trading edge.
 ### Requires
 
 - [Node v18.15.0](https://nodejs.org/)
-- npm v9.6.3
+- npm v9.6.4
 
 ### Installation
 
@@ -30,8 +30,12 @@ npm run start:15m # BTCUSDT 15m candles
 
 ##### `-s` / `--size`
 
-Candle size in seconds (defaults to 60)
+Candle size in seconds (defaults to 60).
 
 ```sh
 node edge.js <SYMBOL> -s <seconds> # e.g. 5m candles 'node edge.js BTCUSDT -s 300'
 ```
+
+##### `-x` / `--lifx <device>`
+
+Use LIFX light device.

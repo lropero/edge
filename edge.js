@@ -16,8 +16,10 @@ import asciichart from 'asciichart'
 import blessed from 'blessed'
 import cfonts from 'cfonts'
 import chalk from 'chalk'
+import convert from 'color-convert'
 import figures from 'figures'
 import jsonfile from 'jsonfile'
+import Lifx from 'lifx-lan-client'
 import stripAnsi from 'strip-ansi'
 import WebSocket from 'ws'
 import { exec } from 'child_process'
@@ -25,6 +27,7 @@ import { format } from 'date-fns'
 import { program } from 'commander'
 
 const BINANCE = 'wss://fstream.binance.com/ws'
+const LIGHT = { brightness: 1, color: '#ffffff', kelvin: 3500 }
 const PLAY = { darwin: 'afplay <SOUND>', win32: '"C:\\Program Files\\VideoLAN\\VLC\\vlc.exe" --intf=null --play-and-exit <SOUND>' }
 
 const store = {}
@@ -104,13 +107,26 @@ const addBoxes = () => {
 }
 
 const analyze = () => {
-  const { candles, threshold } = store
+  const { candles, light, size, threshold } = store
   const values = Object.values(candles).slice(0, -1)
   const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.tickBuy + candle.tickSell))
   const max = Math.max(...diffs.map(diff => Math.abs(diff)))
   if (max > 0) {
     const polarvol = diffs.map(diff => diff / max)
     if (Math.abs(polarvol[polarvol.length - 1]) >= threshold) {
+      if (light) {
+        light.on(0, error => {
+          if (!error) {
+            const hsl = convert.hex.hsl(`#${polarvol[polarvol.length - 1] > 0 ? '00ff00' : 'ff0000'}`)
+            light.color(hsl[0], hsl[1], 100, 3500, 0, error => {
+              if (!error) {
+                const hsl = convert.hex.hsl(LIGHT.color)
+                light.color(hsl[0], hsl[1], LIGHT.brightness, LIGHT.kelvin, size)
+              }
+            })
+          }
+        })
+      }
       log(`${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(polarvol[polarvol.length - 1] * 100) / 100}`)
       play('signal')
     }
@@ -214,6 +230,21 @@ const draw = () => {
   }
   screen.render()
 }
+
+const getLight = device =>
+  new Promise((resolve, reject) => {
+    const client = new Lifx.Client()
+    const timeout = setTimeout(() => reject(new Error(`LIFX light ${chalk.magenta(device)} not found`)), 3000)
+    client.on('light-new', light => {
+      light.getLabel((error, data) => {
+        if (!error && data.toLowerCase() === device.toLowerCase()) {
+          clearTimeout(timeout)
+          return resolve(light)
+        }
+      })
+    })
+    client.init()
+  })
 
 const log = message => {
   updateStore({ message: `${chalk.magenta(figures.bullet)} ${chalk.white(format(new Date(), 'EEE dd/MM HH:mm:ss'))} ${message}` })
@@ -381,18 +412,38 @@ const updateStore = updates => {
 program
   .argument('<symbol>', 'symbol')
   .option('-s, --size <seconds>', 'candle size in seconds (defaults to 60)')
+  .option('-x, --lifx <device>', 'use LIFX light device')
   .action(async (symbol, options) => {
     try {
       const { description, name, version } = await jsonfile.readFile('./package.json')
-      const currency = new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' })
-      const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
       const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
       const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
+      let light
+      if (options.lifx) {
+        light = await getLight(options.lifx)
+        light.on(0, error => {
+          if (error) {
+            throw error
+          }
+          light.color(252, 100, 100, 3500, 0, error => {
+            if (error) {
+              throw error
+            }
+            const hsl = convert.hex.hsl(LIGHT.color)
+            light.color(hsl[0], hsl[1], LIGHT.brightness, LIGHT.kelvin, size * 1000, error => {
+              if (error) {
+                throw error
+              }
+            })
+          })
+        })
+      }
       const webSocket = await createWebSocket()
-      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency, dark: false, header, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, threshold: 1, timers: {}, webSocket })
+      const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
+      updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency: new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' }), dark: false, header, light, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, threshold: 1, timers: {}, webSocket })
       start(`${name.charAt(0).toUpperCase()}${name.slice(1)} v${version}`)
     } catch (error) {
-      console.log(error.toString())
+      console.log(`${chalk.red(figures.cross)} ${error.toString()}`)
       process.exit()
     }
   })

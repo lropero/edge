@@ -23,10 +23,12 @@
     "blessed": "0.1.81",
     "cfonts": "3.1.1",
     "chalk": "5.2.0",
+    "color-convert": "2.0.1",
     "commander": "10.0.0",
     "date-fns": "2.29.3",
     "figures": "5.0.0",
     "jsonfile": "6.1.0",
+    "lifx-lan-client": "2.1.0",
     "lodash": "4.17.21",
     "strip-ansi": "7.0.1",
     "ws": "8.13.0"
