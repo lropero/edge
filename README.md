@@ -28,7 +28,7 @@ npm run start:15m # BTCUSDT 15m candles
 
 ### Options
 
-##### `-s` / `--size`
+##### `-s <seconds>` / `--size <seconds>`
 
 Candle size in seconds (defaults to 60).
 
@@ -36,6 +36,6 @@ Candle size in seconds (defaults to 60).
 node edge.js <SYMBOL> -s <seconds> # e.g. 5m candles 'node edge.js BTCUSDT -s 300'
 ```
 
-##### `-x` / `--lifx <device>`
+##### `-x <device>` / `--lifx <device>`
 
 Use LIFX light device.
