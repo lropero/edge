@@ -411,12 +411,12 @@ const updateStore = updates => {
 
 program
   .argument('<symbol>', 'symbol')
-  .option('-s, --size <seconds>', 'candle size in seconds (defaults to 60)')
+  .option('-s, --size <seconds>', 'candle size in seconds (default 60)', 60)
   .option('-x, --lifx <device>', 'use LIFX light device')
   .action(async (symbol, options) => {
     try {
       const { description, name, version } = await jsonfile.readFile('./package.json')
-      const size = parseInt(options.size ?? 60, 10) > 0 ? parseInt(options.size ?? 60, 10) : 60
+      const size = parseInt(options.size, 10) > 0 ? parseInt(options.size, 10) : 60
       const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       let light
       if (options.lifx) {
