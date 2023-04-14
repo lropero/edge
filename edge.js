@@ -415,9 +415,8 @@ program
   .option('-x, --lifx <device>', 'use LIFX light device')
   .action(async (symbol, options) => {
     try {
-      const { description, name, version } = await jsonfile.readFile('./package.json')
+      const { name, version } = await jsonfile.readFile('./package.json')
       const size = parseInt(options.size, 10) > 0 ? parseInt(options.size, 10) : 60
-      const header = chalk.white(`${chalk.green(description.replace('.', ''))} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       let light
       if (options.lifx) {
         light = await getLight(options.lifx)
@@ -438,6 +437,7 @@ program
           })
         })
       }
+      const header = chalk.white(`${chalk.green(`${name.charAt(0).toUpperCase()}${name.slice(1)}`)} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
       const screen = blessed.screen({ forceUnicode: true, fullUnicode: true, smartCSR: true })
       updateStore({ boxes: {}, buffer: Math.ceil(86400 / size), candles: {}, currency: new Intl.NumberFormat('en-US', { currency: 'USD', minimumFractionDigits: 2, style: 'currency' }), dark: false, header, light, messages: [header], rotation: [0, 1, 2], screen, size: size * 1000, symbol, threshold: 1, timers: {}, webSocket })
