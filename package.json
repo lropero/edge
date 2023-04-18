@@ -2,7 +2,7 @@
   "name": "edge",
   "version": "1.0.0",
   "private": true,
-  "description": "Edge.",
+  "description": "Trading edge.",
   "license": "UNLICENSED",
   "author": "Luciano Ropero <lropero@gmail.com>",
   "type": "module",

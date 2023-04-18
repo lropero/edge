@@ -106,7 +106,7 @@ const addBoxes = () => {
   boxes.disconnected && addBox('disconnected')
 }
 
-const analyze = () => {
+const analyze = async () => {
   const { candles, light, size, threshold } = store
   const values = Object.values(candles).slice(0, -1)
   const diffs = values.map(candle => (candle.volumeBuy - candle.volumeSell) * (candle.tickBuy + candle.tickSell))
@@ -115,17 +115,8 @@ const analyze = () => {
     const polarvol = diffs.map(diff => diff / max)
     if (Math.abs(polarvol[polarvol.length - 1]) >= threshold) {
       if (light) {
-        light.on(0, error => {
-          if (!error) {
-            const hsl = convert.hex.hsl(`#${polarvol[polarvol.length - 1] > 0 ? '00ff00' : 'ff0000'}`)
-            light.color(hsl[0], hsl[1], 100, 3500, 0, error => {
-              if (!error) {
-                const hsl = convert.hex.hsl(LIGHT.color)
-                light.color(hsl[0], hsl[1], LIGHT.brightness, LIGHT.kelvin, size)
-              }
-            })
-          }
-        })
+        await setLight({ color: polarvol[polarvol.length - 1] > 0 ? '00ff00' : 'ff0000' })
+        await setLight({ brightness: LIGHT.brightness, color: LIGHT.color, duration: size, kelvin: LIGHT.kelvin })
       }
       log(`${polarvol[polarvol.length - 1] > 0 ? chalk.green('⬆') : chalk.red('⬇')} ${Math.round(polarvol[polarvol.length - 1] * 100) / 100}`)
       play('signal')
@@ -306,6 +297,22 @@ const setAlert = () => {
   input.focus()
 }
 
+const setLight = ({ brightness = 100, color, duration = 0, kelvin = 3500, light = store.light }) =>
+  new Promise(resolve => {
+    if (!light) {
+      return resolve()
+    }
+    light.on(0, error => {
+      if (error) {
+        return resolve()
+      }
+      const hsl = convert.hex.hsl(`#${color}`)
+      light.color(hsl[0], hsl[1], brightness, kelvin, duration, () => {
+        return resolve()
+      })
+    })
+  })
+
 const start = title => {
   const { screen } = store
   addBoxes()
@@ -420,22 +427,8 @@ program
       let light
       if (options.lifx) {
         light = await getLight(options.lifx)
-        light.on(0, error => {
-          if (error) {
-            throw error
-          }
-          light.color(252, 100, 100, 3500, 0, error => {
-            if (error) {
-              throw error
-            }
-            const hsl = convert.hex.hsl(LIGHT.color)
-            light.color(hsl[0], hsl[1], LIGHT.brightness, LIGHT.kelvin, size * 1000, error => {
-              if (error) {
-                throw error
-              }
-            })
-          })
-        })
+        await setLight({ color: '2c83f7', light })
+        await setLight({ brightness: LIGHT.brightness, color: LIGHT.color, duration: 10000, kelvin: LIGHT.kelvin, light })
       }
       const header = chalk.white(`${chalk.green(`${name.charAt(0).toUpperCase()}${name.slice(1)}`)} v${version} - ${chalk.cyan('a')}lert ${chalk.cyan('c')}lear ${chalk.cyan('d')}ark ${chalk.cyan(figures.arrowUp)}${chalk.gray('/')}${chalk.cyan(figures.arrowDown)}(signal threshold) ${chalk.cyan('q')}uit ${chalk.yellow(`${size}s`)}`)
       const webSocket = await createWebSocket()
